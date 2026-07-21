@@ -6,6 +6,7 @@ Django settings for tianshuipy project - 开发环境配置
 
 from pathlib import Path
 import os
+from dotenv import load_dotenv
 
 
 def env_bool(name, default=False):
@@ -23,6 +24,7 @@ def env_list(name, default=None):
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
 SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-@jmeepv1459j^#n1nfu@87jcfkcp_ia@jip2)m=k#h7n6@89lw")
@@ -189,7 +191,7 @@ FILE_UPLOAD_HANDLERS = [
 ]
 
 # Celery 配置
-# 开发环境同步执行任务，避免未启动 Redis/RabbitMQ 时 calculate_indices 接口报连接错误。
+# 未配置 Redis 时保持同步演示模式；本地 .env 可切换到异步 Worker。
 CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'true').lower() == 'true'
 CELERY_TASK_EAGER_PROPAGATES = False
 CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'memory://')
@@ -254,7 +256,7 @@ CELERY_RESULT_SERIALIZER = 'json'
 CELERY_TIMEZONE = TIME_ZONE
 CELERY_ENABLE_UTC = True
 CELERY_TASK_TRACK_STARTED = True
-CELERY_TASK_TIME_LIMIT = 30 * 60  # 30分钟
-CELERY_TASK_SOFT_TIME_LIMIT = 25 * 60  # 25分钟
+CELERY_TASK_TIME_LIMIT = int(os.getenv('CELERY_TASK_TIME_LIMIT', 30 * 60))
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv('CELERY_TASK_SOFT_TIME_LIMIT', 25 * 60))
 CELERY_WORKER_PREFETCH_MULTIPLIER = 1
-CELERY_WORKER_MAX_TASKS_PER_CHILD = 1000
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1

@@ -3,6 +3,7 @@ $ErrorActionPreference = 'Stop'
 $scriptDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $userProfile = [Environment]::GetFolderPath('UserProfile')
 $condaPython = Join-Path $userProfile 'miniforge3\envs\tianshui-gis\python.exe'
+$anacondaPython = 'D:\Anaconda3\envs\ts\python.exe'
 $venvPython = Join-Path $scriptDir '.venv\Scripts\python.exe'
 $overridePython = $env:TIANSHUI_PYTHON
 
@@ -10,6 +11,8 @@ if ($overridePython -and (Test-Path $overridePython)) {
   $pythonExe = $overridePython
 } elseif (Test-Path $condaPython) {
   $pythonExe = $condaPython
+} elseif (Test-Path $anacondaPython) {
+  $pythonExe = $anacondaPython
 } elseif (Test-Path $venvPython) {
   $pythonExe = $venvPython
 } else {

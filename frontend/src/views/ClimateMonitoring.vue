@@ -300,6 +300,41 @@ const windSpeedChart = ref(null)
 // 状态轮询间隔
 let statusCheckInterval = null
 const HISTORY_KEY = 'climate_monitoring'
+const ACTIVE_TASK_STORAGE_KEY = 'climate_monitoring_active_task'
+
+const saveActiveTask = (taskId, fileName, metric) => {
+  localStorage.setItem(ACTIVE_TASK_STORAGE_KEY, JSON.stringify({
+    taskId,
+    fileName,
+    metric,
+    timestamp: Date.now()
+  }))
+}
+
+const clearActiveTask = () => {
+  localStorage.removeItem(ACTIVE_TASK_STORAGE_KEY)
+}
+
+const restoreActiveTask = () => {
+  try {
+    const activeTask = JSON.parse(localStorage.getItem(ACTIVE_TASK_STORAGE_KEY) || 'null')
+    if (!activeTask?.taskId) {
+      return
+    }
+
+    analysisTaskId.value = activeTask.taskId
+    restoredFileName.value = activeTask.fileName || ''
+    selectedMetric.value = activeTask.metric || ''
+    analysisStatus.value = 'pending'
+    isAnalyzing.value = true
+    uploadProgress.value = 0
+    successMessage.value = '已恢复后台气候分析任务，正在查询进度。'
+    startStatusPolling()
+  } catch (error) {
+    console.warn('恢复气候分析任务失败:', error)
+    clearActiveTask()
+  }
+}
 
 // 文件选择处理
 const handleFileSelect = (event) => {
@@ -441,6 +476,7 @@ const removeFile = () => {
 }
 
 const clearAnalysisState = () => {
+  clearActiveTask()
   hasData.value = false
   analysisNotice.value = ''
   statistics.value = []
@@ -653,6 +689,7 @@ const startAnalysis = async () => {
           }
           
           analysisTaskId.value = taskId
+          saveActiveTask(taskId, selectedFile.value?.name || '', analysisType)
           
           // 3. 开始轮询分析状态
           startStatusPolling()
@@ -716,6 +753,7 @@ const validateStatusResponse = (response) => {
 
 // 开始轮询分析状态
 const startStatusPolling = () => {
+  cleanup()
   // 验证任务ID
   if (!analysisTaskId.value) {
     console.error('任务ID不存在，无法开始状态轮询')
@@ -755,10 +793,15 @@ const startStatusPolling = () => {
               if (statusResponse.status === 'completed') {
           // 分析完成，获取结果
           uploadProgress.value = 100
-          await loadAnalysisResults()
+          const resultsLoaded = await loadAnalysisResults()
           clearInterval(statusCheckInterval)
+          statusCheckInterval = null
           isAnalyzing.value = false
-          hasData.value = true
+          hasData.value = resultsLoaded
+          if (!resultsLoaded) {
+            return
+          }
+          clearActiveTask()
           successMessage.value = '气候数据分析完成！'
           // 5秒后自动清除成功消息
           setTimeout(() => {
@@ -768,8 +811,10 @@ const startStatusPolling = () => {
         // 分析失败
         errorMessage.value = statusResponse.error_message || '分析失败'
         clearInterval(statusCheckInterval)
+        statusCheckInterval = null
         isAnalyzing.value = false
         uploadProgress.value = 0
+        clearActiveTask()
       } else if (statusResponse.status === 'processing') {
         // 更新进度
         const progress = Number(statusResponse.progress) || 0
@@ -791,6 +836,7 @@ const startStatusPolling = () => {
     } catch (error) {
       console.error('状态检查失败:', error)
       clearInterval(statusCheckInterval)
+      statusCheckInterval = null
       isAnalyzing.value = false
       uploadProgress.value = 0
       errorMessage.value = `状态检查失败: ${error.message}`
@@ -948,10 +994,12 @@ const loadAnalysisResults = async () => {
     setTimeout(() => {
       generateCharts()
     }, 100)
+    return true
     
   } catch (error) {
     console.error('加载分析结果失败:', error)
     errorMessage.value = error.message || '加载分析结果失败'
+    return false
   }
 }
 
@@ -981,6 +1029,7 @@ const cleanup = () => {
 onMounted(() => {
   console.log('气候监测组件已挂载')
   historyItems.value = loadResultHistory(HISTORY_KEY)
+  restoreActiveTask()
 })
 
 // 组件卸载时清理

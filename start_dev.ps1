@@ -5,73 +5,60 @@ $backendDir = Join-Path $root 'backend'
 $frontendDir = Join-Path $root 'frontend'
 $backendScript = Join-Path $backendDir 'start_dev.ps1'
 $frontendScript = Join-Path $frontendDir 'start_dev.ps1'
-$userProfile = [Environment]::GetFolderPath('UserProfile')
-$backendCondaPython = Join-Path $userProfile 'miniforge3\envs\tianshui-gis\python.exe'
+$redisScript = Join-Path $backendDir 'start_redis.ps1'
+$celeryScript = Join-Path $backendDir 'start_celery_worker.ps1'
 
-if (-not (Test-Path $backendScript)) {
-    throw "找不到后端启动脚本: $backendScript"
-}
-
-if (-not (Test-Path $frontendScript)) {
-    throw "找不到前端启动脚本: $frontendScript"
-}
-
-if (-not (Test-Path $backendCondaPython)) {
-    Write-Warning "未找到推荐的后端 GIS 环境: $backendCondaPython。可改用 backend\\.venv 或设置环境变量 TIANSHUI_PYTHON。"
-}
-
-$frontendPackage = Join-Path $frontendDir 'package.json'
-if (-not (Test-Path $frontendPackage)) {
-    throw "找不到前端 package.json: $frontendPackage"
-}
-
-$frontendNodeModules = Join-Path $frontendDir 'node_modules'
-if (-not (Test-Path $frontendNodeModules)) {
-    Write-Warning "前端依赖目录未找到: $frontendNodeModules。请先运行 frontend\npm install。"
-}
-
-function Test-PortAvailable {
-    param(
-        [int]$Port
-    )
-
-    try {
-        $listener = [System.Net.Sockets.TcpListener]::new([System.Net.IPAddress]::Loopback, $Port)
-        $listener.Start()
-        $listener.Stop()
-        return $true
-    } catch {
-        return $false
+foreach ($scriptPath in @($backendScript, $frontendScript, $redisScript, $celeryScript)) {
+    if (-not (Test-Path $scriptPath)) {
+        throw "Missing startup script: $scriptPath"
     }
 }
 
-$portChecks = @(
-    @{ Port = 8000; Label = '后端'; Address = '127.0.0.1:8000' },
-    @{ Port = 3000; Label = '前端'; Address = 'localhost:3000' }
-)
+function Test-PortListening {
+    param([int]$Port)
 
-$occupiedPorts = @()
-foreach ($item in $portChecks) {
-    if (-not (Test-PortAvailable -Port $item.Port)) {
-        $occupiedPorts += $item
-    }
+    return Test-NetConnection -ComputerName '127.0.0.1' -Port $Port -InformationLevel Quiet -WarningAction SilentlyContinue
 }
 
-if ($occupiedPorts.Count -gt 0) {
-    Write-Warning '检测到目标端口已被占用，请先关闭对应程序后再启动：'
-    foreach ($item in $occupiedPorts) {
-        Write-Warning ("- {0}端口 {1}" -f $item.Label, $item.Address)
-    }
-    throw "端口占用阻止启动。"
+function Start-ProjectScript {
+    param([string]$ScriptPath, [string]$WorkingDirectory)
+
+    Start-Process -FilePath 'powershell.exe' `
+        -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-File', $ScriptPath `
+        -WorkingDirectory $WorkingDirectory
 }
 
-Write-Host '正在启动后端...' -ForegroundColor Cyan
-Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-Command', "Set-Location '$backendDir'; & '$backendScript'" -WorkingDirectory $backendDir
+Write-Host 'Checking Redis...' -ForegroundColor Cyan
+& $redisScript
 
-Write-Host '正在启动前端...' -ForegroundColor Cyan
-Start-Process -FilePath 'powershell.exe' -ArgumentList '-NoProfile', '-ExecutionPolicy', 'Bypass', '-NoExit', '-Command', "Set-Location '$frontendDir'; & '$frontendScript'" -WorkingDirectory $frontendDir
+if (Test-PortListening -Port 8000) {
+    Write-Host 'Django is already running on http://127.0.0.1:8000/' -ForegroundColor Yellow
+} else {
+    Write-Host 'Starting Django...' -ForegroundColor Cyan
+    Start-ProjectScript -ScriptPath $backendScript -WorkingDirectory $backendDir
+}
+
+if (Test-PortListening -Port 3000) {
+    Write-Host 'Frontend is already running on http://localhost:3000/' -ForegroundColor Yellow
+} else {
+    Write-Host 'Starting frontend...' -ForegroundColor Cyan
+    Start-ProjectScript -ScriptPath $frontendScript -WorkingDirectory $frontendDir
+}
+
+$existingWorker = Get-CimInstance Win32_Process -ErrorAction SilentlyContinue |
+    Where-Object { $_.CommandLine -match 'celery.*worker' -and $_.CommandLine -match 'tianshuipy' } |
+    Select-Object -First 1
+
+if ($existingWorker) {
+    Write-Host 'Celery Worker is already running.' -ForegroundColor Yellow
+} else {
+    Write-Host 'Starting Celery Worker...' -ForegroundColor Cyan
+    Start-ProjectScript -ScriptPath $celeryScript -WorkingDirectory $backendDir
+}
+
+Start-Sleep -Seconds 3
+Start-Process 'http://localhost:3000/'
 
 Write-Host ''
-Write-Host '后端和前端已分别在新 PowerShell 窗口中启动。' -ForegroundColor Green
-Write-Host '后端地址: http://127.0.0.1:8000/' -ForegroundColor Green
-Write-Host '前端地址: http://localhost:3000/' -ForegroundColor Green
+Write-Host 'Project startup command has completed.' -ForegroundColor Green
+Write-Host 'Keep the Django, frontend, and Celery windows open while using the project.' -ForegroundColor Green

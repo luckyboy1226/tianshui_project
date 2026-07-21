@@ -82,11 +82,12 @@ import AnalysisResult from '../components/RemoteSensing/AnalysisResult.vue';
 import LoadingSpinner from '../components/Common/LoadingSpinner.vue';
 import ProgressBar from '../components/Common/ProgressBar.vue';
 import ErrorBoundary from '../components/Common/ErrorBoundary.vue';
-import { remoteSensingService } from '../services/api.js';
+import { remoteSensingService, processingTaskService } from '../services/api.js';
 import { useLoadingStore } from '../store/loading.js';
 import { useMessageStore } from '../store/message.js';
 
 const OVERLAY_RSEI_REFRESH_KEY = 'overlay_rsei_refresh_signal';
+const ACTIVE_TASK_STORAGE_KEY = 'remote_sensing_active_task';
 const CACHE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
 const INDEX_OPTIONS = [
   { key: 'rsei', label: '遥感生态指数 (RSEI)' },
@@ -182,6 +183,7 @@ const globalLoading = computed(() => loadingStore.globalLoading);
 onMounted(async () => {
   loadCacheFromStorage();
   await validateHistoryCacheInBackground();
+  resumeActiveTask();
   
   // 调试信息
   console.log('组件挂载，当前状态:', {
@@ -190,6 +192,48 @@ onMounted(async () => {
     hasFile: !!currentFile.value
   });
 });
+
+function saveActiveTask(taskId, imageId, indexType, uploadedFileName) {
+  localStorage.setItem(ACTIVE_TASK_STORAGE_KEY, JSON.stringify({
+    taskId,
+    imageId,
+    indexType,
+    uploadedFileName,
+    timestamp: Date.now()
+  }));
+}
+
+function clearActiveTask(taskId) {
+  try {
+    const activeTask = JSON.parse(localStorage.getItem(ACTIVE_TASK_STORAGE_KEY) || 'null');
+    if (!taskId || activeTask?.taskId === taskId) {
+      localStorage.removeItem(ACTIVE_TASK_STORAGE_KEY);
+    }
+  } catch (error) {
+    localStorage.removeItem(ACTIVE_TASK_STORAGE_KEY);
+  }
+}
+
+function resumeActiveTask() {
+  try {
+    const activeTask = JSON.parse(localStorage.getItem(ACTIVE_TASK_STORAGE_KEY) || 'null');
+    if (!activeTask?.taskId || !activeTask?.imageId || !activeTask?.indexType) {
+      return;
+    }
+
+    currentTaskId.value = activeTask.taskId;
+    currentImageId.value = activeTask.imageId;
+    selectedIndex.value = activeTask.indexType;
+    fileName.value = activeTask.uploadedFileName || '';
+    status.value = 'analyzing';
+    currentStep.value = '正在恢复任务状态';
+    stepDetail.value = '正在查询后台计算进度。';
+    pollTaskStatus(activeTask.taskId, activeTask.imageId);
+  } catch (error) {
+    console.warn('Unable to restore background task:', error);
+    localStorage.removeItem(ACTIVE_TASK_STORAGE_KEY);
+  }
+}
 
 // 检查认证状态
 function checkAuthStatus() {
@@ -1068,6 +1112,39 @@ async function handleStartAnalysis() {
       fileName: currentFile.value?.name || ''
     });
 
+    const uploadedImage = await remoteSensingService.upload(currentFile.value, {
+      name: fileName.value || currentFile.value.name,
+      image_type: 'custom'
+    });
+    currentImageId.value = uploadedImage?.id;
+    if (!currentImageId.value) {
+      throw new Error('上传响应中未返回影像 ID。');
+    }
+
+    const taskIndices = backendIndex === 'rsei'
+      ? ['greenness', 'wetness', 'dryness', 'heat']
+      : [backendIndex];
+    const taskResponse = await remoteSensingService.calculateIndices(
+      currentImageId.value,
+      taskIndices
+    );
+    currentTaskId.value = taskResponse?.task_id;
+    if (!currentTaskId.value) {
+      throw new Error('任务创建响应中未返回任务 ID。');
+    }
+
+    saveActiveTask(
+      currentTaskId.value,
+      currentImageId.value,
+      selectedIndex.value,
+      fileName.value
+    );
+    currentStep.value = '任务已提交';
+    stepDetail.value = '正在由后台计算，请稍候。';
+    messageStore.success('分析任务已提交，可离开页面后稍后返回查看结果。');
+    pollTaskStatus(currentTaskId.value, currentImageId.value);
+
+    /* Legacy synchronous upload-and-analyze flow kept for reference.
     startProgressSimulator();
     const analyzeResult = await remoteSensingService.analyzeUpload(currentFile.value, backendIndex, {
       name: fileName.value || '未命名影像'
@@ -1099,6 +1176,7 @@ async function handleStartAnalysis() {
     saveAnalysisResult(resultData.value, currentImageId.value, selectedIndex.value);
     messageStore.success('分析完成！');
     
+    */
   } catch (error) {
     console.error('分析失败:', error);
     console.error('错误类型:', typeof error);
@@ -1269,6 +1347,7 @@ async function pollTaskStatus(taskId, imageId) {
         console.log('任务完成，获取到的任务详情:', taskDetail);
         
         status.value = 'done';
+        clearActiveTask(taskId);
         // 停止进度模拟器
         stopProgressSimulator();
         
@@ -1307,6 +1386,7 @@ async function pollTaskStatus(taskId, imageId) {
       } else if (taskStatus === 'failed') {
         // 任务失败
         status.value = 'error';
+        clearActiveTask(taskId);
         resultData.value = { error: '分析任务执行失败' };
         // 停止进度模拟器
         stopProgressSimulator();
@@ -1317,8 +1397,9 @@ async function pollTaskStatus(taskId, imageId) {
         attempts++;
         
         // 动态更新进度
-        const progressIncrement = Math.min(5, Math.random() * 3 + 1); // 每次增加1-4%
-        analysisProgress.value = Math.min(95, analysisProgress.value + progressIncrement);
+        analysisProgress.value = Number.isFinite(Number(statusResult.progress))
+          ? Number(statusResult.progress)
+          : analysisProgress.value;
         
         // 更新步骤信息
         if (taskStatus === 'processing') {

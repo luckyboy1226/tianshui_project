@@ -142,16 +142,16 @@ class RemoteSensingImageUploadSerializer(serializers.ModelSerializer):
     def validate(self, data):
         """整体验证"""
         # 确保必需字段存在
-        required_fields = ['name', 'image_type', 'acquisition_date', 'center_lat', 'center_lon']
+        required_fields = ['name', 'image_type']
         for field in required_fields:
             if not data.get(field):
                 raise serializers.ValidationError(f"字段 {field} 是必需的")
         
         # 验证坐标范围
-        if data.get('center_lat') and (data['center_lat'] < -90 or data['center_lat'] > 90):
+        if data.get('center_lat') is not None and (data['center_lat'] < -90 or data['center_lat'] > 90):
             raise serializers.ValidationError("纬度必须在-90到90之间")
         
-        if data.get('center_lon') and (data['center_lon'] < -180 or data['center_lon'] > 180):
+        if data.get('center_lon') is not None and (data['center_lon'] < -180 or data['center_lon'] > 180):
             raise serializers.ValidationError("经度必须在-180到180之间")
         
         return data

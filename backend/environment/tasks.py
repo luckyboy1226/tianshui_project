@@ -313,7 +313,6 @@ def calculate_ecological_indices(self, image_id, indices_list, task_id=None):
         
         # 更新任务状态
         try:
-            from django.utils import timezone
             task.status = 'completed'
             task.progress = 100
             task.current_step = '处理完成'
@@ -481,7 +480,6 @@ def calculate_rsei_only(self, image_id):
         
         # 更新任务状态
         try:
-            from django.utils import timezone
             task.status = 'completed'
             task.progress = 100
             task.current_step = 'RSEI计算完成'

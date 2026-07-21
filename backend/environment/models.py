@@ -28,11 +28,11 @@ class RemoteSensingImage(models.Model):
     thumbnail = models.ImageField(upload_to='thumbnails/', blank=True, null=True, verbose_name='缩略图')
     
     # 地理信息（简化版本，不使用GIS字段）
-    center_lat = models.FloatField(verbose_name='中心纬度')
-    center_lon = models.FloatField(verbose_name='中心经度')
+    center_lat = models.FloatField(blank=True, null=True, verbose_name='中心纬度')
+    center_lon = models.FloatField(blank=True, null=True, verbose_name='中心经度')
     
     # 时间信息
-    acquisition_date = models.DateField(verbose_name='获取日期')
+    acquisition_date = models.DateField(blank=True, null=True, verbose_name='获取日期')
     processing_date = models.DateTimeField(auto_now_add=True, verbose_name='处理时间')
     
     # 元数据
