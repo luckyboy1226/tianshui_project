@@ -1,41 +1,298 @@
-# Logs
-# --------------------
-# 这些是通用规则，可以匹配项目内任何地方的日志文件，所以保留原样
+# ============================================
+# Django
+# ============================================
 *.log
+*.pot
+*.pyc
+__pycache__/
+local_settings.py
+db.sqlite3
+db.sqlite3-journal
+*.pyo
+*.pyd
+.Python
+*.cover
+*.py,cover
+.coverage
+.coverage.*
+nosetests.xml
+coverage.xml
+htmlcov/
+.cover/
+.hypothesis/
+.pytest_cache/
+.tox/
+
+# ============================================
+# Vue.js / Node.js
+# ============================================
+/frontend/node_modules/
 npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
-pnpm-debug.log*
 lerna-debug.log*
+.pnpm-debug.log*
+.eslintcache
+.stylelintcache
+*.tsbuildinfo
 
-# 如果有专门存放日志的文件夹，现在它在frontend里，所以要指明路径
-frontend/logs/
-backend/logs/
+# ============================================
+# 构建输出
+# ============================================
+build/
+/frontend/dist/
+/backend/staticfiles/
+*.tgz
 
-# Dependencies, build artifacts, and local files
-# --------------------
-# 【关键】明确指定忽略 frontend 目录下的 node_modules 和 dist 文件夹
-frontend/node_modules/
-frontend/dist/
-frontend/dist-ssr/
-backend/*.sqlite3/
+# ============================================
+# 虚拟环境
+# ============================================
+env/
+venv/
+ENV/
+env.bak/
+venv.bak/
+.env
+.venv
+.env/
+.venv/
 
-# 忽略所有 .local 文件，比如 .env.local
-*.local
+# ============================================
+# 环境变量和配置文件
+# ============================================
+.env.local
+.env.production
+.env.development
+.env.test
+.env.staging
+.env.development.local
+.env.test.local
+.env.production.local
+config/local.py
+config/production.py
 
+# ============================================
+# 数据库文件
+# ============================================
+*.db
+*.sqlite
+*.sqlite3
 
-# Editor directories and files
-# --------------------
-# 这些是针对整个项目的编辑器配置，通常放在根目录
-# 使用 / 开头可以确保只匹配根目录下的文件夹，是更好的实践
-/.vscode/*
-!/.vscode/extensions.json
-/.idea/
+# ============================================
+# 媒体文件和上传目录
+# ============================================
+/DATA/
+/backend/media/
+/backend/uploads/
+/backend/user_uploads/
 
-# 这些是通用的系统和编辑器文件，保留原样即可
+# ============================================
+# 日志文件
+# ============================================
+/backend/logs/
+*.log
+
+# ============================================
+# 临时文件和目录
+# ============================================
+tmp/
+temp/
+*.tmp
+/backend/landuse_analysis/tmp/
+/backend/media/landuse_analysis/tmp/
+/backend/media/thumbnails/
+/backend/media/visualizations/
+
+# ============================================
+# 备份文件
+# ============================================
+*.bak
+*.backup
+*.old
+
+# ============================================
+# 测试文件和测试数据
+# ============================================
+# 测试脚本文件
+*test*.py
+*debug*.py
+*diagnose*.py
+generate_test_data*.py
+
+# 测试数据目录和文件
+test_data/
+test_data_v2/
+*test_data*
+*test_climate_data*
+*debug_test*
+*test_wrong*
+*landuse_ecological*.zip
+*landuse_example*.tif
+*landuse_example*.zip
+
+# 测试相关文件
+*test*.js
+*test*.md
+*test*.zip
+*test*.csv
+*test*.xlsx
+*debug*.md
+*debug*.csv
+
+# 异常测试数据
+*climate_data_anomaly*
+*climate_data_extreme*
+*climate_data_header_only*
+*climate_data_empty*
+
+# 重复的测试文件（保留示例文件）
+climate_data_2024_*.csv
+!climate_data_2024.csv
+!sample_climate_data.csv
+
+# ============================================
+# 临时工具脚本（根目录下的临时脚本）
+# ============================================
+# 注意：保留 environment/management/commands/ 下的管理命令
+/fix_*.py
+/check_*.py
+/verify_*.py
+/publish_*.py
+/migrate_*.py
+
+# ============================================
+# 前端备用和临时文件
+# ============================================
+*备用*.vue
+*_backup*.vue
+*_temp*.vue
+*_old*.vue
+
+# ============================================
+# 临时JSON和示例文件
+# ============================================
+sample-geojson_*.json
+*sample-*.json
+*temp*.json
+*_tmp*.json
+
+# ============================================
+# 压缩文件（保留ZIP，忽略RAR等）
+# ============================================
+*.rar
+*.7z
+*.tar.gz
+*.tar.bz2
+
+# ============================================
+# GDAL和地理数据辅助文件
+# ============================================
+*.aux.xml
+*.ovr
+*.aux
+*.qix
+*.qml
+
+# ============================================
+# 临时Shapefile文件（如果不需要版本控制）
+# ============================================
+# 注意：如果需要版本控制Shapefile，请注释掉以下规则
+*.dbf
+*.prj
+*.shp
+*.shx
+*.cpg
+*.shp.xml
+
+# ============================================
+# 用户上传的临时文件
+# ============================================
+/backend/media/climate_data/*_*
+!/backend/media/climate_data/climate_data_2024.csv
+!/backend/media/climate_data/sample_climate_data.csv
+
+# 生态指数临时文件
+/backend/media/ecological_indices/*/
+
+# 遥感数据临时文件
+/backend/media/remote_sensing/*.tif
+/backend/media/remote_sensing/stacked_image*.tif
+
+# ============================================
+# 敏感信息文件
+# ============================================
+*密码*.txt
+*password*.txt
+*secret*.txt
+*admin*.txt
+超级管理员账户密码.txt
+
+# ============================================
+# 文档草稿和临时文档
+# ============================================
+*_DRAFT.md
+*_TODO.md
+*_TEMP.md
+DATA_VALIDATION_IMPROVEMENTS.md
+待删除文件列表.txt
+文件清理清单.md
+
+# ============================================
+# IDE和编辑器
+# ============================================
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# ============================================
+# 操作系统生成的文件
+# ============================================
 .DS_Store
-*.suo
-*.ntvs*
-*.njsproj
-*.sln
-*.sw?
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# ============================================
+# 其他缓存和临时文件
+# ============================================
+.cache/
+.parcel-cache/
+.grunt/
+.serverless/
+.fusebox/
+.dynamodb/
+.tern-port
+.vscode-test
+.yarn/cache
+.yarn/unplugged
+.yarn/build-state.yml
+.yarn/install-state.gz
+.pnp.*
+.node_repl_history
+
+# ============================================
+# 运行时数据
+# ============================================
+pids
+*.pid
+*.seed
+*.pid.lock
+
+# ============================================
+# 依赖目录（可选）
+# ============================================
+bower_components/
+jspm_packages/
+typings/
+
+# ============================================
+# 依赖锁定文件（可选，根据需要取消注释）
+# ============================================
+# package-lock.json
+# yarn.lock
+# Pipfile.lock

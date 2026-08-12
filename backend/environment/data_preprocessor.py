@@ -24,6 +24,40 @@ except ImportError:
 logger = logging.getLogger(__name__)
 
 
+LANDSAT_OLI_BAND_SPECS = [
+    {'key': 'SR_B2', 'patterns': ['*_SR_B2.TIF', '*_B2.TIF'], 'description': 'SR_B2_BLUE', 'required': True},
+    {'key': 'SR_B3', 'patterns': ['*_SR_B3.TIF', '*_B3.TIF'], 'description': 'SR_B3_GREEN', 'required': True},
+    {'key': 'SR_B4', 'patterns': ['*_SR_B4.TIF', '*_B4.TIF'], 'description': 'SR_B4_RED', 'required': True},
+    {'key': 'SR_B5', 'patterns': ['*_SR_B5.TIF', '*_B5.TIF'], 'description': 'SR_B5_NIR', 'required': True},
+    {'key': 'SR_B6', 'patterns': ['*_SR_B6.TIF', '*_B6.TIF'], 'description': 'SR_B6_SWIR1', 'required': True},
+    {'key': 'SR_B7', 'patterns': ['*_SR_B7.TIF', '*_B7.TIF'], 'description': 'SR_B7_SWIR2', 'required': True},
+    {'key': 'ST_B10', 'patterns': ['*_ST_B10.TIF', '*_B10.TIF'], 'description': 'ST_B10_THERMAL', 'required': False},
+]
+
+LANDSAT_TM_ETM_BAND_SPECS = [
+    {'key': 'SR_B1', 'patterns': ['*_SR_B1.TIF', '*_B1.TIF'], 'description': 'SR_B1_BLUE', 'required': True},
+    {'key': 'SR_B2', 'patterns': ['*_SR_B2.TIF', '*_B2.TIF'], 'description': 'SR_B2_GREEN', 'required': True},
+    {'key': 'SR_B3', 'patterns': ['*_SR_B3.TIF', '*_B3.TIF'], 'description': 'SR_B3_RED', 'required': True},
+    {'key': 'SR_B4', 'patterns': ['*_SR_B4.TIF', '*_B4.TIF'], 'description': 'SR_B4_NIR', 'required': True},
+    {'key': 'SR_B5', 'patterns': ['*_SR_B5.TIF', '*_B5.TIF'], 'description': 'SR_B5_SWIR1', 'required': True},
+    {'key': 'SR_B7', 'patterns': ['*_SR_B7.TIF', '*_B7.TIF'], 'description': 'SR_B7_SWIR2', 'required': True},
+    {'key': 'ST_B6', 'patterns': ['*_ST_B6.TIF', '*_B6.TIF'], 'description': 'ST_B6_THERMAL', 'required': False},
+]
+
+SENTINEL_2_BAND_SPECS = [
+    {'key': 'B02', 'patterns': ['*_B02_10m.jp2', '*_B02.jp2'], 'description': 'B02_BLUE', 'required': True},
+    {'key': 'B03', 'patterns': ['*_B03_10m.jp2', '*_B03.jp2'], 'description': 'B03_GREEN', 'required': True},
+    {'key': 'B04', 'patterns': ['*_B04_10m.jp2', '*_B04.jp2'], 'description': 'B04_RED', 'required': True},
+    {'key': 'B05', 'patterns': ['*_B05_20m.jp2', '*_B05.jp2'], 'description': 'B05_RED_EDGE1', 'required': False},
+    {'key': 'B06', 'patterns': ['*_B06_20m.jp2', '*_B06.jp2'], 'description': 'B06_RED_EDGE2', 'required': False},
+    {'key': 'B07', 'patterns': ['*_B07_20m.jp2', '*_B07.jp2'], 'description': 'B07_RED_EDGE3', 'required': False},
+    {'key': 'B08', 'patterns': ['*_B08_10m.jp2', '*_B08.jp2'], 'description': 'B08_NIR', 'required': True},
+    {'key': 'B8A', 'patterns': ['*_B8A_20m.jp2', '*_B8A.jp2'], 'description': 'B8A_NARROW_NIR', 'required': False},
+    {'key': 'B11', 'patterns': ['*_B11_20m.jp2', '*_B11.jp2'], 'description': 'B11_SWIR1', 'required': True},
+    {'key': 'B12', 'patterns': ['*_B12_20m.jp2', '*_B12.jp2'], 'description': 'B12_SWIR2', 'required': True},
+]
+
+
 class DataPreprocessor:
     """数据预处理器"""
     
@@ -252,14 +286,25 @@ class DataPreprocessor:
                 band_dataset = gdal.Open(str(band_file), gdal.GA_ReadOnly)
                 if band_dataset is None:
                     raise ValueError(f"无法打开波段文件: {band_file}")
-                
-                # 验证尺寸
-                if (band_dataset.RasterXSize != width or 
-                    band_dataset.RasterYSize != height):
-                    raise ValueError(f"波段文件尺寸不匹配: {band_file}")
-                
+
+                source_dataset = band_dataset
+                if (
+                    band_dataset.RasterXSize != width or
+                    band_dataset.RasterYSize != height or
+                    band_dataset.GetGeoTransform() != geotransform or
+                    band_dataset.GetProjection() != projection
+                ):
+                    logger.info(f"波段尺寸或网格不一致，正在重采样到参考网格: {band_file}")
+                    source_dataset = self._resample_dataset_to_reference(
+                        band_dataset,
+                        width,
+                        height,
+                        geotransform,
+                        projection,
+                    )
+
                 # 读取波段数据
-                band_data = band_dataset.GetRasterBand(1).ReadAsArray()
+                band_data = source_dataset.GetRasterBand(1).ReadAsArray()
                 
                 # 写入输出数据集
                 output_band = output_dataset.GetRasterBand(i + 1)
@@ -291,6 +336,7 @@ class DataPreprocessor:
                 except:
                     pass
                 
+                source_dataset = None
                 band_dataset = None
             
             output_dataset = None
@@ -381,6 +427,79 @@ class DataPreprocessor:
         except Exception as e:
             logger.error(f"数据重采样失败: {e}")
             return False
+
+    def _collect_band_files(self, data_dir, band_specs):
+        collected = {}
+        data_dir = Path(data_dir)
+
+        for spec in band_specs:
+            matched_path = None
+            for pattern in spec['patterns']:
+                files = list(data_dir.glob(pattern))
+                if files:
+                    matched_path = str(files[0])
+                    break
+
+            if matched_path:
+                collected[spec['key']] = {
+                    'path': matched_path,
+                    'description': spec['description'],
+                    'required': spec.get('required', False),
+                }
+                logger.info(f"找到{spec['key']}波段: {Path(matched_path).name}")
+            elif spec.get('required', False):
+                logger.warning(f"未找到必需波段: {spec['key']}")
+            else:
+                logger.info(f"未找到可选波段: {spec['key']}")
+
+        return collected
+
+    def _select_landsat_band_specs(self, landsat_dir):
+        landsat_dir = Path(landsat_dir)
+
+        oli_required = ['*_SR_B2.TIF', '*_SR_B3.TIF', '*_SR_B4.TIF', '*_SR_B5.TIF', '*_SR_B6.TIF', '*_SR_B7.TIF']
+        tm_required = ['*_SR_B1.TIF', '*_SR_B2.TIF', '*_SR_B3.TIF', '*_SR_B4.TIF', '*_SR_B5.TIF', '*_SR_B7.TIF']
+
+        if all(any(landsat_dir.glob(pattern)) for pattern in oli_required):
+            return 'landsat_oli', LANDSAT_OLI_BAND_SPECS
+        if all(any(landsat_dir.glob(pattern)) for pattern in tm_required):
+            return 'landsat_tm_etm', LANDSAT_TM_ETM_BAND_SPECS
+
+        # 回退到原始波段命名
+        oli_raw_required = ['*_B2.TIF', '*_B3.TIF', '*_B4.TIF', '*_B5.TIF', '*_B6.TIF', '*_B7.TIF']
+        tm_raw_required = ['*_B1.TIF', '*_B2.TIF', '*_B3.TIF', '*_B4.TIF', '*_B5.TIF', '*_B7.TIF']
+        if all(any(landsat_dir.glob(pattern)) for pattern in oli_raw_required):
+            return 'landsat_oli', LANDSAT_OLI_BAND_SPECS
+        if all(any(landsat_dir.glob(pattern)) for pattern in tm_raw_required):
+            return 'landsat_tm_etm', LANDSAT_TM_ETM_BAND_SPECS
+
+        return None, []
+
+    def _resample_dataset_to_reference(self, src_dataset, width, height, geotransform, projection):
+        min_x = geotransform[0]
+        max_y = geotransform[3]
+        max_x = min_x + width * geotransform[1]
+        min_y = max_y + height * geotransform[5]
+        src_band = src_dataset.GetRasterBand(1)
+        nodata = src_band.GetNoDataValue()
+
+        warp_kwargs = {
+            'format': 'MEM',
+            'width': width,
+            'height': height,
+            'outputBounds': [min_x, min_y, max_x, max_y],
+            'resampleAlg': gdal.GRA_Bilinear,
+            'srcNodata': nodata,
+            'dstNodata': nodata,
+        }
+        if projection:
+            warp_kwargs['dstSRS'] = projection
+
+        warp_options = gdal.WarpOptions(**warp_kwargs)
+        warped_dataset = gdal.Warp('', src_dataset, options=warp_options)
+        if warped_dataset is None:
+            raise ValueError(f"重采样波段失败: {gdal.GetLastErrorMsg()}")
+        return warped_dataset
     
     def process_landsat_data(self, landsat_dir, output_path, target_epsg=32650):
         """
@@ -396,47 +515,39 @@ class DataPreprocessor:
         """
         try:
             landsat_dir = Path(landsat_dir)
-            
-            # 查找Landsat波段文件
-            band_patterns = {
-                'B2': '*_SR_B2.TIF',  # 蓝波段
-                'B3': '*_SR_B3.TIF',  # 绿波段
-                'B4': '*_SR_B4.TIF',  # 红波段
-                'B5': '*_SR_B5.TIF',  # 近红外波段
-                'B6': '*_SR_B6.TIF',  # 短波红外1
-                'B7': '*_SR_B7.TIF'   # 短波红外2
-            }
-            
-            band_files = {}
-            for band_name, pattern in band_patterns.items():
-                files = list(landsat_dir.glob(pattern))
-                if files:
-                    band_files[band_name] = str(files[0])
-                else:
-                    logger.warning(f"未找到{band_name}波段文件")
-            
-            if not band_files:
-                raise ValueError("未找到任何Landsat波段文件")
+
+            sensor_profile, band_specs = self._select_landsat_band_specs(landsat_dir)
+            if not band_specs:
+                raise ValueError("未识别到可处理的Landsat波段组合")
+
+            logger.info(f"识别到Landsat预处理配置: {sensor_profile}")
+            band_files = self._collect_band_files(landsat_dir, band_specs)
+            required_specs = [spec for spec in band_specs if spec.get('required')]
+            missing_required = [spec['key'] for spec in required_specs if spec['key'] not in band_files]
+            if missing_required:
+                raise ValueError(f"缺少必需的Landsat波段: {', '.join(missing_required)}")
             
             # 验证所有波段文件
-            for band_name, file_path in band_files.items():
-                validation = self.validate_input_data(file_path)
+            for band_name, band_info in band_files.items():
+                validation = self.validate_input_data(band_info['path'])
                 if not validation['valid']:
                     raise ValueError(f"{band_name}波段文件验证失败: {validation['error']}")
             
             # 转换坐标系统
             converted_files = {}
-            for band_name, file_path in band_files.items():
+            for band_name, band_info in band_files.items():
                 converted_path = self.temp_dir / f"{band_name}_converted.tif"
-                if self.convert_coordinate_system(file_path, converted_path, target_epsg):
-                    converted_files[band_name] = str(converted_path)
+                if self.convert_coordinate_system(band_info['path'], converted_path, target_epsg):
+                    converted_files[band_name] = {
+                        'path': str(converted_path),
+                        'description': band_info['description'],
+                    }
                 else:
                     raise ValueError(f"{band_name}波段坐标转换失败")
             
-            # 合并波段
-            band_order = ['B2', 'B3', 'B4', 'B5', 'B6', 'B7']
-            band_paths = [converted_files[band] for band in band_order if band in converted_files]
-            band_names = ['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2']
+            ordered_band_keys = [spec['key'] for spec in band_specs if spec['key'] in converted_files]
+            band_paths = [converted_files[band]['path'] for band in ordered_band_keys]
+            band_names = [converted_files[band]['description'] for band in ordered_band_keys]
             
             if self.merge_bands(band_paths, output_path, band_names):
                 logger.info(f"Landsat数据处理完成: {output_path}")
@@ -462,39 +573,18 @@ class DataPreprocessor:
         """
         try:
             sentinel_dir = Path(sentinel_dir)
-            
-            # 查找Sentinel-2波段文件 - 支持多种命名格式
-            band_patterns = {
-                'B02': ['*_B02_10m.jp2', '*_B02.jp2'],  # 蓝波段
-                'B03': ['*_B03_10m.jp2', '*_B03.jp2'],  # 绿波段
-                'B04': ['*_B04_10m.jp2', '*_B04.jp2'],  # 红波段
-                'B08': ['*_B08_10m.jp2', '*_B08.jp2'],  # 近红外波段
-                'B11': ['*_B11_20m.jp2', '*_B11.jp2'],  # 短波红外1
-                'B12': ['*_B12_20m.jp2', '*_B12.jp2']   # 短波红外2
-            }
-            
-            band_files = {}
-            for band_name, patterns in band_patterns.items():
-                found = False
-                for pattern in patterns:
-                    files = list(sentinel_dir.glob(pattern))
-                    if files:
-                        band_files[band_name] = str(files[0])
-                        logger.info(f"找到{band_name}波段: {files[0].name}")
-                        found = True
-                        break
-                if not found:
-                    logger.warning(f"未找到{band_name}波段文件")
-            
-            if not band_files:
-                raise ValueError("未找到任何Sentinel-2波段文件")
-            
-            logger.info(f"找到{len(band_files)}个波段文件")
+            band_files = self._collect_band_files(sentinel_dir, SENTINEL_2_BAND_SPECS)
+            required_specs = [spec for spec in SENTINEL_2_BAND_SPECS if spec.get('required')]
+            missing_required = [spec['key'] for spec in required_specs if spec['key'] not in band_files]
+            if missing_required:
+                raise ValueError(f"缺少必需的Sentinel-2波段: {', '.join(missing_required)}")
+
+            logger.info(f"找到{len(band_files)}个Sentinel-2波段文件")
             
             # 验证所有波段文件
-            for band_name, file_path in band_files.items():
+            for band_name, band_info in band_files.items():
                 logger.info(f"验证{band_name}波段文件...")
-                validation = self.validate_input_data(file_path)
+                validation = self.validate_input_data(band_info['path'])
                 if not validation['valid']:
                     raise ValueError(f"{band_name}波段文件验证失败: {validation['error']}")
                 logger.info(f"{band_name}波段验证通过")
@@ -502,22 +592,25 @@ class DataPreprocessor:
             # 转换坐标系统
             logger.info("开始坐标系统转换...")
             converted_files = {}
-            for band_name, file_path in band_files.items():
+            for band_name, band_info in band_files.items():
                 logger.info(f"转换{band_name}波段坐标系统...")
                 converted_path = self.temp_dir / f"{band_name}_converted.tif"
                 
-                success = self.convert_coordinate_system(file_path, converted_path, target_epsg)
+                success = self.convert_coordinate_system(band_info['path'], converted_path, target_epsg)
                 if success and converted_path.exists():
-                    converted_files[band_name] = str(converted_path)
+                    converted_files[band_name] = {
+                        'path': str(converted_path),
+                        'description': band_info['description'],
+                    }
                     logger.info(f"{band_name}波段坐标转换成功")
                 else:
                     raise ValueError(f"{band_name}波段坐标转换失败")
             
-            # 合并波段（跳过重采样，直接使用转换后的文件）
+            # 合并波段（如分辨率不同，将自动重采样到参考网格）
             logger.info("开始波段合并...")
-            band_order = ['B02', 'B03', 'B04', 'B08', 'B11', 'B12']
-            band_paths = [converted_files[band] for band in band_order if band in converted_files]
-            band_names = ['Blue', 'Green', 'Red', 'NIR', 'SWIR1', 'SWIR2']
+            ordered_band_keys = [spec['key'] for spec in SENTINEL_2_BAND_SPECS if spec['key'] in converted_files]
+            band_paths = [converted_files[band]['path'] for band in ordered_band_keys]
+            band_names = [converted_files[band]['description'] for band in ordered_band_keys]
             
             logger.info(f"准备合并{len(band_paths)}个波段")
             

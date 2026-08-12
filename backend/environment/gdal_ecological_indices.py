@@ -5,9 +5,15 @@ GDAL (Geospatial Data Abstraction Library) 是处理地理空间数据的强大�
 
 import numpy as np
 from osgeo import gdal, osr
+import matplotlib
+matplotlib.use('Agg')  # 使用非交互式后端
 import matplotlib.pyplot as plt
 import matplotlib.colors as colors
 from matplotlib.colors import LinearSegmentedColormap
+
+# 设置中文字体支持
+plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'sans-serif']
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 import os
 import tempfile
 from PIL import Image
@@ -16,6 +22,26 @@ from sklearn.decomposition import PCA
 from sklearn.preprocessing import StandardScaler
 import logging
 import json
+try:
+    from .band_mapping import (
+        get_band_descriptions,
+        get_band_scale_offset,
+        get_tasseled_cap_coefficients,
+        infer_standard_band_mapping,
+        thermal_band_is_calibrated,
+        thermal_conversion_parameters,
+        uses_approximate_tasseled_cap,
+    )
+except ImportError:  # 兼容直接运行脚本
+    from band_mapping import (
+        get_band_descriptions,
+        get_band_scale_offset,
+        get_tasseled_cap_coefficients,
+        infer_standard_band_mapping,
+        thermal_band_is_calibrated,
+        thermal_conversion_parameters,
+        uses_approximate_tasseled_cap,
+    )
 
 # 设置GDAL错误处理
 gdal.UseExceptions()
@@ -39,6 +65,8 @@ class GDALEcologicalIndexCalculator:
         self.metadata = {}
         self.geotransform = None
         self.projection = None
+        self._sensor_band_mapping = None
+        self._scaled_band_cache = {}
         
     def load_image(self):
         """使用GDAL加载遥感影像"""
@@ -70,6 +98,8 @@ class GDALEcologicalIndexCalculator:
                     'offset': band.GetOffset(),
                     'unit_type': band.GetUnitType()
                 }
+            self._sensor_band_mapping = None
+            self._scaled_band_cache = {}
             
             logger.info(f"成功加载影像: {self.image_path}")
             logger.info(f"影像尺寸: {self.width} x {self.height}, 波段数: {self.band_count}")
@@ -102,42 +132,93 @@ class GDALEcologicalIndexCalculator:
             }
         
         return info
+
+    def _get_sensor_band_mapping(self):
+        if self._sensor_band_mapping is None and self.band_count:
+            self._sensor_band_mapping = infer_standard_band_mapping(
+                dataset=self.dataset,
+                band_count=self.band_count,
+                descriptions=get_band_descriptions(self.dataset, band_count=self.band_count),
+            )
+            if self._sensor_band_mapping:
+                logger.info(f"识别到GDAL波段映射: {self._sensor_band_mapping}")
+        return self._sensor_band_mapping
+
+    def _get_scaled_band_by_index(self, band_index):
+        """按scale/offset还原指定0基波段数据。"""
+        if band_index in self._scaled_band_cache:
+            return self._scaled_band_cache[band_index]
+
+        band_number = band_index + 1
+        band_data = self.bands.get(band_number)
+        if band_data is None:
+            return None
+
+        scale, offset = get_band_scale_offset(self.dataset, band_index, band_count=self.band_count)
+        scaled_band = band_data.astype(np.float32, copy=False) * np.float32(scale) + np.float32(offset)
+        self._scaled_band_cache[band_index] = scaled_band
+        return scaled_band
+
+    def _get_band_array(self, band_name):
+        mapping = self._get_sensor_band_mapping()
+        if not mapping:
+            return None
+
+        band_index = mapping.get(band_name)
+        if band_index is None:
+            return None
+        return self._get_scaled_band_by_index(band_index)
+
+    def _safe_normalized_difference(self, band_a, band_b):
+        if band_a is None or band_b is None:
+            return None
+
+        numerator = band_a - band_b
+        denominator = band_a + band_b
+        result = np.full_like(band_a, np.nan, dtype=np.float32)
+        valid_mask = np.isfinite(band_a) & np.isfinite(band_b) & (denominator != 0)
+        result[valid_mask] = numerator[valid_mask] / denominator[valid_mask]
+        return np.clip(result, -1.0, 1.0)
+
+    def _safe_divide(self, numerator, denominator):
+        result = np.full_like(numerator, np.nan, dtype=np.float32)
+        valid_mask = np.isfinite(numerator) & np.isfinite(denominator) & (denominator != 0)
+        result[valid_mask] = numerator[valid_mask] / denominator[valid_mask]
+        return result
+
+    def _normalize_to_unit_interval(self, index_data):
+        normalized = np.full_like(index_data, np.nan, dtype=np.float32)
+        valid_mask = np.isfinite(index_data)
+        if not np.any(valid_mask):
+            return normalized
+
+        valid_values = index_data[valid_mask]
+        min_val = np.min(valid_values)
+        max_val = np.max(valid_values)
+        if max_val > min_val:
+            normalized[valid_mask] = (valid_values - min_val) / (max_val - min_val)
+        else:
+            normalized[valid_mask] = 0.0
+        return normalized
     
     def calculate_ndvi(self, red_band=3, nir_band=4):
-        """
-        计算NDVI（归一化植被指数）
-        
-        Args:
-            red_band: 红波段编号
-            nir_band: 近红外波段编号
-        """
+        """计算NDVI（归一化植被指数）"""
         try:
-            if red_band not in self.bands or nir_band not in self.bands:
-                raise ValueError(f"波段 {red_band} 或 {nir_band} 不存在")
-            
-            red = self.bands[red_band]
-            nir = self.bands[nir_band]
-            
-            # 处理无效值
-            red_valid = np.isfinite(red)
-            nir_valid = np.isfinite(nir)
-            valid_mask = red_valid & nir_valid
-            
-            # 初始化结果数组
-            ndvi = np.full(red.shape, np.nan, dtype=np.float32)
-            
-            # 计算NDVI
-            denominator = nir + red
-            valid_denominator = denominator[valid_mask]
-            
-            # 避免除零错误
-            valid_denominator[valid_denominator == 0] = 1e-10
-            
-            ndvi[valid_mask] = (nir[valid_mask] - red[valid_mask]) / valid_denominator
-            
-            # 限制值范围
-            ndvi = np.clip(ndvi, -1, 1)
-            
+            nir = self._get_band_array('nir')
+            red = self._get_band_array('red')
+
+            if nir is None or red is None:
+                if self.band_count == 3:
+                    nir = self._get_scaled_band_by_index(1)
+                    red = self._get_scaled_band_by_index(0)
+                    logger.info("GDAL计算器使用RGB波段近似计算NDVI")
+                else:
+                    raise ValueError(f"当前波段配置不支持NDVI计算: {self.band_count}波段")
+
+            ndvi = self._safe_normalized_difference(nir, red)
+            if ndvi is None:
+                raise ValueError("NDVI计算失败，近红外或红波段无效")
+
             logger.info("NDVI计算完成")
             return ndvi
             
@@ -146,40 +227,23 @@ class GDALEcologicalIndexCalculator:
             return None
     
     def calculate_ndwi(self, green_band=2, nir_band=4):
-        """
-        计算NDWI（归一化水体指数）
-        
-        Args:
-            green_band: 绿波段编号
-            nir_band: 近红外波段编号
-        """
+        """计算NDWI（归一化水体指数）"""
         try:
-            if green_band not in self.bands or nir_band not in self.bands:
-                raise ValueError(f"波段 {green_band} 或 {nir_band} 不存在")
-            
-            green = self.bands[green_band]
-            nir = self.bands[nir_band]
-            
-            # 处理无效值
-            green_valid = np.isfinite(green)
-            nir_valid = np.isfinite(nir)
-            valid_mask = green_valid & nir_valid
-            
-            # 初始化结果数组
-            ndwi = np.full(green.shape, np.nan, dtype=np.float32)
-            
-            # 计算NDWI
-            denominator = green + nir
-            valid_denominator = denominator[valid_mask]
-            
-            # 避免除零错误
-            valid_denominator[valid_denominator == 0] = 1e-10
-            
-            ndwi[valid_mask] = (green[valid_mask] - nir[valid_mask]) / valid_denominator
-            
-            # 限制值范围
-            ndwi = np.clip(ndwi, -1, 1)
-            
+            green = self._get_band_array('green')
+            nir = self._get_band_array('nir')
+
+            if green is None or nir is None:
+                if self.band_count == 3:
+                    green = self._get_scaled_band_by_index(1)
+                    nir = self._get_scaled_band_by_index(0)
+                    logger.info("GDAL计算器使用RGB波段近似计算NDWI")
+                else:
+                    raise ValueError(f"当前波段配置不支持NDWI计算: {self.band_count}波段")
+
+            ndwi = self._safe_normalized_difference(green, nir)
+            if ndwi is None:
+                raise ValueError("NDWI计算失败，绿波段或近红外波段无效")
+
             logger.info("NDWI计算完成")
             return ndwi
             
@@ -188,40 +252,23 @@ class GDALEcologicalIndexCalculator:
             return None
     
     def calculate_ndbi(self, nir_band=4, swir_band=5):
-        """
-        计算NDBI（归一化建筑指数）
-        
-        Args:
-            nir_band: 近红外波段编号
-            swir_band: 短波红外波段编号
-        """
+        """计算NDBI（归一化建筑指数）"""
         try:
-            if nir_band not in self.bands or swir_band not in self.bands:
-                raise ValueError(f"波段 {nir_band} 或 {swir_band} 不存在")
-            
-            nir = self.bands[nir_band]
-            swir = self.bands[swir_band]
-            
-            # 处理无效值
-            nir_valid = np.isfinite(nir)
-            swir_valid = np.isfinite(swir)
-            valid_mask = nir_valid & swir_valid
-            
-            # 初始化结果数组
-            ndbi = np.full(nir.shape, np.nan, dtype=np.float32)
-            
-            # 计算NDBI
-            denominator = nir + swir
-            valid_denominator = denominator[valid_mask]
-            
-            # 避免除零错误
-            valid_denominator[valid_denominator == 0] = 1e-10
-            
-            ndbi[valid_mask] = (swir[valid_mask] - nir[valid_mask]) / valid_denominator
-            
-            # 限制值范围
-            ndbi = np.clip(ndbi, -1, 1)
-            
+            nir = self._get_band_array('nir')
+            swir = self._get_band_array('swir1')
+
+            if swir is None or nir is None:
+                if self.band_count == 3:
+                    swir = self._get_scaled_band_by_index(2)
+                    nir = self._get_scaled_band_by_index(0)
+                    logger.info("GDAL计算器使用RGB波段近似计算NDBI")
+                else:
+                    raise ValueError(f"当前波段配置不支持NDBI计算: {self.band_count}波段")
+
+            ndbi = self._safe_normalized_difference(swir, nir)
+            if ndbi is None:
+                raise ValueError("NDBI计算失败，短波红外或近红外波段无效")
+
             logger.info("NDBI计算完成")
             return ndbi
             
@@ -230,80 +277,169 @@ class GDALEcologicalIndexCalculator:
             return None
     
     def calculate_ndsi(self, green_band=2, swir_band=5):
-        """
-        计算NDSI（归一化积雪指数）
-        
-        Args:
-            green_band: 绿波段编号
-            swir_band: 短波红外波段编号
-        """
+        """计算NDSI（归一化积雪指数）"""
         try:
-            if green_band not in self.bands or swir_band not in self.bands:
-                raise ValueError(f"波段 {green_band} 或 {swir_band} 不存在")
-            
-            green = self.bands[green_band]
-            swir = self.bands[swir_band]
-            
-            # 处理无效值
-            green_valid = np.isfinite(green)
-            swir_valid = np.isfinite(swir)
-            valid_mask = green_valid & swir_valid
-            
-            # 初始化结果数组
-            ndsi = np.full(green.shape, np.nan, dtype=np.float32)
-            
-            # 计算NDSI
-            denominator = green + swir
-            valid_denominator = denominator[valid_mask]
-            
-            # 避免除零错误
-            valid_denominator[valid_denominator == 0] = 1e-10
-            
-            ndsi[valid_mask] = (green[valid_mask] - swir[valid_mask]) / valid_denominator
-            
-            # 限制值范围
-            ndsi = np.clip(ndsi, -1, 1)
-            
+            green = self._get_band_array('green')
+            swir = self._get_band_array('swir1')
+            blue = self._get_band_array('blue')
+            red = self._get_band_array('red')
+
+            if green is not None and swir is not None:
+                ndsi = self._safe_normalized_difference(green, swir)
+                logger.info("GDAL计算器使用 Green/SWIR1 计算标准NDSI")
+            elif self.band_count == 4 and green is not None and red is not None:
+                ndsi = self._safe_normalized_difference(green, red)
+                logger.info("GDAL计算器缺少SWIR1，使用 Green/Red 近似计算NDSI")
+            elif self.band_count == 3 and green is not None and blue is not None:
+                ndsi = self._safe_normalized_difference(green, blue)
+                logger.info("GDAL计算器为RGB影像，使用 Green/Blue 近似计算NDSI")
+            else:
+                raise ValueError(f"当前波段配置不支持NDSI计算: {self.band_count}波段")
+
             logger.info("NDSI计算完成")
-            return ndsi
+            return np.clip(ndsi, -1, 1) if ndsi is not None else None
             
         except Exception as e:
             logger.error(f"计算NDSI失败: {e}")
             return None
-    
+
+    def calculate_wetness(self):
+        """计算湿度指数（WET，基于标准Tasseled Cap 湿度分量）"""
+        try:
+            mapping = self._get_sensor_band_mapping()
+            if not mapping:
+                raise ValueError("无法识别影像波段布局")
+
+            blue = self._get_band_array('blue')
+            green = self._get_band_array('green')
+            red = self._get_band_array('red')
+            nir = self._get_band_array('nir')
+            swir1 = self._get_band_array('swir1')
+            swir2 = self._get_band_array('swir2')
+
+            if any(item is None for item in [blue, green, red, nir, swir1, swir2]):
+                raise ValueError("当前影像缺少计算WET所需的Blue/Green/Red/NIR/SWIR1/SWIR2波段")
+
+            tc_coefficients = get_tasseled_cap_coefficients(mapping.get('profile'))
+            if not tc_coefficients or 'wetness' not in tc_coefficients:
+                raise ValueError("当前影像缺少可用的Tasseled Cap 系数，无法计算标准WET")
+
+            coefficients = tc_coefficients['wetness']
+            if uses_approximate_tasseled_cap(mapping.get('profile')):
+                logger.warning("GDAL计算器正在使用通用6波段近似系数计算WET")
+
+            wetness = (
+                coefficients[0] * blue +
+                coefficients[1] * green +
+                coefficients[2] * red +
+                coefficients[3] * nir +
+                coefficients[4] * swir1 +
+                coefficients[5] * swir2
+            ).astype(np.float32)
+
+            logger.info("WET计算完成")
+            return wetness
+        except Exception as e:
+            logger.error(f"计算WET失败: {e}")
+            return None
+
+    def calculate_dryness(self):
+        """计算干度指数（NDBSI = (SI + IBI) / 2）"""
+        try:
+            blue = self._get_band_array('blue')
+            green = self._get_band_array('green')
+            red = self._get_band_array('red')
+            nir = self._get_band_array('nir')
+            swir1 = self._get_band_array('swir1')
+
+            if any(item is None for item in [blue, green, red, nir, swir1]):
+                raise ValueError("当前影像缺少计算NDBSI所需的Blue/Green/Red/NIR/SWIR1波段")
+
+            si_numerator = (swir1 + red) - (nir + blue)
+            si_denominator = (swir1 + red) + (nir + blue)
+            si = self._safe_divide(si_numerator, si_denominator)
+
+            ndbi_component = self._safe_divide(2.0 * swir1, swir1 + nir)
+            vegetation_component = self._safe_divide(nir, nir + red)
+            water_component = self._safe_divide(green, green + swir1)
+            ibi_numerator = ndbi_component - (vegetation_component + water_component)
+            ibi_denominator = ndbi_component + vegetation_component + water_component
+            ibi = self._safe_divide(ibi_numerator, ibi_denominator)
+
+            dryness = ((si + ibi) / 2.0).astype(np.float32)
+            logger.info("干度指数计算完成")
+            return dryness
+        except Exception as e:
+            logger.error(f"计算干度指数失败: {e}")
+            return None
+
+    def calculate_heat(self):
+        """计算热度指数（LST/热红外亮温分量）。"""
+        try:
+            mapping = self._get_sensor_band_mapping() or {}
+            thermal = self._get_band_array('thermal')
+            if thermal is None:
+                raise ValueError("当前影像缺少热红外/LST波段")
+
+            if not thermal_band_is_calibrated(mapping=mapping, dataset=self.dataset):
+                raise ValueError("当前影像热红外波段缺少可靠的温度量纲信息")
+
+            heat = np.where(np.isfinite(thermal), thermal, np.nan).astype(np.float32)
+            scale, offset = thermal_conversion_parameters(mapping.get('profile'))
+            if scale is not None and offset is not None:
+                raw_scale, raw_offset = get_band_scale_offset(
+                    self.dataset,
+                    mapping['thermal'],
+                    band_count=self.band_count,
+                )
+                if abs(raw_scale - 1.0) <= 1e-12 and abs(raw_offset) <= 1e-12:
+                    heat = heat * np.float32(scale) + np.float32(offset)
+                    logger.info("GDAL计算器按已知传感器参数补充还原热红外温度")
+
+            logger.info("热度指数计算完成")
+            return heat
+        except Exception as e:
+            logger.error(f"计算热度指数失败: {e}")
+            return None
+
+    def calculate_greenness(self):
+        """计算绿度指数（标准RSEI中使用NDVI作为绿度分量）"""
+        return self.calculate_ndvi()
+
     def calculate_tasseled_cap(self):
         """
         计算缨帽变换（Tasseled Cap Transformation）
         用于提取绿度、亮度、湿度等特征
         """
         try:
-            # Landsat 8 缨帽变换系数
-            # 假设波段顺序：Blue, Green, Red, NIR, SWIR1, SWIR2
-            tc_coefficients = {
-                'brightness': [0.3029, 0.2786, 0.4733, 0.5599, 0.5080, 0.1872],
-                'greenness': [-0.2941, -0.2430, -0.5424, 0.7276, 0.0713, -0.1608],
-                'wetness': [0.1511, 0.1973, 0.3283, 0.3407, -0.7117, -0.4559],
-                'fourth': [-0.8239, 0.0849, 0.4396, -0.0580, 0.2013, -0.2773],
-                'fifth': [-0.3294, 0.0557, 0.1056, 0.1855, -0.4349, 0.8085],
-                'sixth': [0.1079, -0.9023, 0.4119, 0.0575, -0.0259, 0.0252]
-            }
-            
-            # 准备波段数据
-            band_data = []
-            for i in range(1, min(7, self.band_count + 1)):  # 最多6个波段
-                band_data.append(self.bands[i].flatten())
+            band_mapping = self._get_sensor_band_mapping()
+            required_roles = ['blue', 'green', 'red', 'nir', 'swir1', 'swir2']
+            if any(band_mapping.get(role) is None for role in required_roles):
+                raise ValueError(
+                    f"当前影像缺少缨帽变换所需波段，识别结果: {band_mapping}"
+                )
+
+            tc_coefficients = get_tasseled_cap_coefficients(band_mapping.get('profile'))
+            if not tc_coefficients:
+                raise ValueError("当前影像缺少可用的Tasseled Cap 系数")
+            if uses_approximate_tasseled_cap(band_mapping.get('profile')):
+                logger.warning("GDAL计算器正在使用通用6波段近似系数执行缨帽变换")
+
+            # 按语义波段顺序抽取，而不是简单截取前6个波段
+            band_data = [
+                self._get_scaled_band_by_index(band_mapping[role]).flatten()
+                for role in required_roles
+            ]
             
             band_matrix = np.column_stack(band_data)
             
             # 计算缨帽变换
             tc_results = {}
             for component, coefficients in tc_coefficients.items():
-                if len(coefficients) <= len(band_data):
-                    # 只使用可用的波段
-                    coef_array = np.array(coefficients[:len(band_data)])
-                    tc_value = np.dot(band_matrix, coef_array)
-                    tc_results[component] = tc_value.reshape(self.height, self.width)
-            
+                coef_array = np.array(coefficients[:len(band_data)])
+                tc_value = np.dot(band_matrix, coef_array)
+                tc_results[component] = tc_value.reshape(self.height, self.width)
+
             logger.info("缨帽变换计算完成")
             return tc_results
             
@@ -314,65 +450,74 @@ class GDALEcologicalIndexCalculator:
     def calculate_rsei(self):
         """
         计算RSEI（遥感生态指数）
-        基于主成分分析的综合生态指数
+        基于标准四分量归一化和主成分分析的综合生态指数
         """
         try:
-            # 计算四个基础指数
-            tc_results = self.calculate_tasseled_cap()
-            if tc_results is None:
-                raise ValueError("无法计算缨帽变换")
-            
-            # 提取四个分量
-            greenness = tc_results.get('greenness', None)
-            wetness = tc_results.get('wetness', None)
-            brightness = tc_results.get('brightness', None)  # 作为干度指数
-            fourth = tc_results.get('fourth', None)  # 作为热度指数
-            
-            if any(x is None for x in [greenness, wetness, brightness, fourth]):
-                raise ValueError("无法获取所有缨帽变换分量")
-            
-            # 准备数据矩阵
-            valid_mask = np.isfinite(greenness) & np.isfinite(wetness) & \
-                        np.isfinite(brightness) & np.isfinite(fourth)
-            
+            greenness = self.calculate_greenness()
+            wetness = self.calculate_wetness()
+            dryness = self.calculate_dryness()
+            heat = self.calculate_heat()
+
+            if any(item is None for item in [greenness, wetness, dryness, heat]):
+                raise ValueError("无法获取计算RSEI所需的全部分量")
+
+            greenness_n = self._normalize_to_unit_interval(greenness)
+            wetness_n = self._normalize_to_unit_interval(wetness)
+            dryness_n = self._normalize_to_unit_interval(dryness)
+            heat_n = self._normalize_to_unit_interval(heat)
+
+            valid_mask = (
+                np.isfinite(greenness_n) &
+                np.isfinite(wetness_n) &
+                np.isfinite(dryness_n) &
+                np.isfinite(heat_n)
+            )
+            if not np.any(valid_mask):
+                raise ValueError("没有有效像元用于计算RSEI")
+
             data_matrix = np.column_stack([
-                greenness[valid_mask],
-                wetness[valid_mask],
-                brightness[valid_mask],
-                fourth[valid_mask]
+                greenness_n[valid_mask],
+                wetness_n[valid_mask],
+                dryness_n[valid_mask],
+                heat_n[valid_mask],
             ])
-            
-            # 标准化
-            scaler = StandardScaler()
-            data_scaled = scaler.fit_transform(data_matrix)
-            
-            # 主成分分析
+
             pca = PCA(n_components=4)
-            pca_result = pca.fit_transform(data_scaled)
-            
-            # 第一主成分作为RSEI
+            pca_result = pca.fit_transform(data_matrix)
             pc1 = pca_result[:, 0]
-            
-            # 重构RSEI图像
+
+            ecological_score = (
+                greenness_n[valid_mask] +
+                wetness_n[valid_mask] -
+                dryness_n[valid_mask] -
+                heat_n[valid_mask]
+            )
+            corr_matrix = np.corrcoef(pc1, ecological_score)
+            pc1_corr = corr_matrix[0, 1] if corr_matrix.shape == (2, 2) else np.nan
+            corrected_components = pca.components_.copy()
+            if np.isfinite(pc1_corr) and pc1_corr < 0:
+                pc1 = -pc1
+                corrected_components[0] = -corrected_components[0]
+
+            rsei_values = np.full(valid_mask.sum(), 0.0, dtype=np.float32)
+            pc1_min = np.nanmin(pc1)
+            pc1_max = np.nanmax(pc1)
+            if pc1_max > pc1_min:
+                rsei_values = ((pc1 - pc1_min) / (pc1_max - pc1_min)).astype(np.float32)
+
             rsei = np.full(greenness.shape, np.nan, dtype=np.float32)
-            rsei[valid_mask] = pc1
-            
-            # 标准化到[0, 1]范围
-            rsei_valid = rsei[valid_mask]
-            rsei[valid_mask] = (rsei_valid - np.min(rsei_valid)) / (np.max(rsei_valid) - np.min(rsei_valid))
-            
-            # 计算权重
-            weights = pca.components_[0]
-            
+            rsei[valid_mask] = rsei_values
+
             logger.info("RSEI计算完成")
             return {
                 'rsei': rsei,
-                'greenness': greenness,
-                'wetness': wetness,
-                'dryness': -brightness,  # 干度指数为亮度的负值
-                'heat': fourth,
-                'weights': weights,
-                'explained_variance': pca.explained_variance_ratio_
+                'greenness': greenness_n,
+                'wetness': wetness_n,
+                'dryness': dryness_n,
+                'heat': heat_n,
+                'weights': corrected_components[0],
+                'pca_components': corrected_components,
+                'explained_variance': pca.explained_variance_ratio_,
             }
             
         except Exception as e:
@@ -512,12 +657,29 @@ class GDALEcologicalIndexCalculator:
             valid_data = index_data[np.isfinite(index_data)]
             if len(valid_data) == 0:
                 raise ValueError("没有有效数据")
+
+            height, width = index_data.shape
+            raster_ratio = width / height if height else 1.0
+            map_panel_weight = min(max(raster_ratio, 1.0), 2.8)
             
             # 创建图形
-            fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(15, 6))
+            fig, (ax1, ax2) = plt.subplots(
+                1,
+                2,
+                figsize=(15, 6),
+                gridspec_kw={'width_ratios': [map_panel_weight, 1.0]},
+            )
             
             # 主图：指数分布
-            im1 = ax1.imshow(index_data, cmap=colormap, vmin=np.min(valid_data), vmax=np.max(valid_data))
+            im1 = ax1.imshow(
+                index_data,
+                cmap=colormap,
+                vmin=np.min(valid_data),
+                vmax=np.max(valid_data),
+                aspect='equal',
+                interpolation='nearest',
+            )
+            ax1.set_box_aspect(height / width)
             ax1.set_title(f'{index_name} 分布图')
             ax1.axis('off')
             
@@ -559,6 +721,8 @@ class GDALEcologicalIndexCalculator:
         """关闭数据集"""
         if self.dataset is not None:
             self.dataset = None
+            self._sensor_band_mapping = None
+            self._scaled_band_cache = {}
             logger.info("数据集已关闭")
 
 

@@ -9,7 +9,9 @@ from .models import (
     RemoteSensingImage, 
     EcologicalIndex, 
     RSEIResult, 
-    ProcessingTask
+    ProcessingTask,
+    ClimateDataFile,
+    ClimateAnalysisResult
 )
 from .ecological_indices import EcologicalIndexCalculator
 
@@ -17,7 +19,7 @@ logger = logging.getLogger(__name__)
 
 
 @shared_task(bind=True)
-def calculate_ecological_indices(self, image_id, indices_list):
+def calculate_ecological_indices(self, image_id, indices_list, task_id=None):
     """
     计算生态指数的Celery任务
     
@@ -58,13 +60,23 @@ def calculate_ecological_indices(self, image_id, indices_list):
         except RemoteSensingImage.DoesNotExist:
             raise ValueError(f"找不到ID为 {image_id} 的遥感影像")
         
-        # 创建处理任务记录
-        task = ProcessingTask.objects.create(
-            remote_sensing_image=image,
-            task_type='ecological_index_calculation',
-            status='processing'
-        )
-        logger.info(f"创建处理任务成功，任务ID: {task.id}")
+        if task_id:
+            task = ProcessingTask.objects.get(id=task_id)
+            task.status = 'processing'
+            task.progress = 0
+            task.current_step = '开始处理'
+            task.started_at = timezone.now()
+            task.error_message = ''
+            task.save(update_fields=['status', 'progress', 'current_step', 'started_at', 'error_message'])
+            logger.info(f"复用处理任务成功，任务ID: {task.id}")
+        else:
+            task = ProcessingTask.objects.create(
+                remote_sensing_image=image,
+                task_type='ecological_index_calculation',
+                status='processing',
+                started_at=timezone.now()
+            )
+            logger.info(f"创建处理任务成功，任务ID: {task.id}")
         
         # 更新任务进度
         self.update_state(
@@ -112,6 +124,10 @@ def calculate_ecological_indices(self, image_id, indices_list):
                 
                 # 更新进度
                 progress = int((i / len(indices_list)) * 100)
+                if task:
+                    task.progress = progress
+                    task.current_step = f'正在计算 {index_type}'
+                    task.save(update_fields=['progress', 'current_step'])
                 self.update_state(
                     state='PROGRESS',
                     meta={
@@ -194,7 +210,7 @@ def calculate_ecological_indices(self, image_id, indices_list):
         
         logger.info(f"基础指数计算完成，成功计算 {len(calculated_indices)} 个指数")
         
-        # 如果计算了RSEI所需的四个分量，则计算RSEI
+        # 如果计算了标准RSEI所需的四个分量，则计算RSEI
         rsei_components = ['greenness', 'wetness', 'dryness', 'heat']
         if all(comp in calculated_indices for comp in rsei_components):
             try:
@@ -279,11 +295,12 @@ def calculate_ecological_indices(self, image_id, indices_list):
                             logger.error(f"创建RSEI指数记录失败: {rsei_index_error}")
                 else:
                     logger.warning("RSEI计算失败")
-                
             except Exception as e:
                 logger.error(f"计算RSEI时出错: {e}")
                 import traceback
                 traceback.print_exc()
+        elif 'rsei' in indices_list:
+            logger.warning("已请求RSEI，但当前影像未成功生成标准RSEI所需的四个基础分量")
         
         # 更新遥感影像状态
         try:
@@ -296,7 +313,6 @@ def calculate_ecological_indices(self, image_id, indices_list):
         
         # 更新任务状态
         try:
-            from django.utils import timezone
             task.status = 'completed'
             task.progress = 100
             task.current_step = '处理完成'
@@ -464,7 +480,6 @@ def calculate_rsei_only(self, image_id):
         
         # 更新任务状态
         try:
-            from django.utils import timezone
             task.status = 'completed'
             task.progress = 100
             task.current_step = 'RSEI计算完成'
@@ -537,4 +552,223 @@ def cleanup_temp_files():
         
     except Exception as e:
         logger.error(f"清理临时文件失败: {e}")
-        return {'status': 'error', 'message': str(e)} 
+        return {'status': 'error', 'message': str(e)}
+
+
+def validate_climate_task_inputs(file_id, task_id, analysis_type):
+    """验证气候分析任务输入参数"""
+    errors = []
+    
+    # 验证file_id
+    if not file_id:
+        errors.append("file_id不能为空")
+    elif not isinstance(file_id, (str, int)):
+        errors.append("file_id必须是字符串或整数")
+    
+    # 验证task_id
+    if not task_id:
+        errors.append("task_id不能为空")
+    elif not isinstance(task_id, (str, int)):
+        errors.append("task_id必须是字符串或整数")
+    
+    # 验证analysis_type
+    if not analysis_type:
+        errors.append("analysis_type不能为空")
+    elif not isinstance(analysis_type, str):
+        errors.append("analysis_type必须是字符串")
+    else:
+        valid_types = ['comprehensive', 'temperature', 'precipitation', 'humidity', 'wind']
+        if analysis_type not in valid_types:
+            errors.append(f"analysis_type无效，支持的类型: {', '.join(valid_types)}")
+    
+    return errors
+
+@shared_task(bind=True)
+def analyze_climate_data_task(self, file_id, task_id, analysis_type='comprehensive'):
+    """
+    气候数据分析Celery任务
+    
+    Args:
+        file_id: 气候数据文件ID
+        task_id: 处理任务ID
+        analysis_type: 分析类型
+    """
+    task = None
+    data_file = None
+    
+    try:
+        # 验证输入参数
+        validation_errors = validate_climate_task_inputs(file_id, task_id, analysis_type)
+        if validation_errors:
+            raise ValueError(f"输入参数验证失败: {'; '.join(validation_errors)}")
+        
+        # 获取任务和文件对象
+        try:
+            task = ProcessingTask.objects.get(id=task_id)
+        except ProcessingTask.DoesNotExist:
+            raise ValueError(f"处理任务不存在: {task_id}")
+        except Exception as e:
+            raise ValueError(f"查询处理任务失败: {str(e)}")
+        
+        try:
+            data_file = ClimateDataFile.objects.get(id=file_id)
+        except ClimateDataFile.DoesNotExist:
+            raise ValueError(f"气候数据文件不存在: {file_id}")
+        except Exception as e:
+            raise ValueError(f"查询气候数据文件失败: {str(e)}")
+        
+        # 验证任务状态
+        if task.status not in ['pending', 'processing']:
+            raise ValueError(f"任务状态不正确，当前状态: {task.status}")
+        
+        # 验证文件状态
+        if data_file.status not in ['uploaded', 'processing']:
+            raise ValueError(f"文件状态不正确，当前状态: {data_file.status}")
+        
+        # 验证文件是否存在
+        if not data_file.file or not data_file.file.name:
+            raise ValueError("文件数据损坏，文件不存在")
+        
+        # 验证文件路径
+        try:
+            file_path = data_file.file.path
+            if not os.path.exists(file_path):
+                raise ValueError(f"文件路径不存在: {file_path}")
+        except Exception as e:
+            raise ValueError(f"获取文件路径失败: {str(e)}")
+        
+        # 更新任务状态
+        try:
+            task.status = 'processing'
+            task.started_at = timezone.now()
+            task.current_step = '开始分析气候数据'
+            task.progress = 10
+            task.save()
+            logger.info(f"任务状态更新为processing: {task_id}")
+        except Exception as e:
+            raise ValueError(f"更新任务状态失败: {str(e)}")
+        
+        # 更新文件状态
+        try:
+            data_file.status = 'processing'
+            data_file.save()
+            logger.info(f"文件状态更新为processing: {file_id}")
+        except Exception as e:
+            raise ValueError(f"更新文件状态失败: {str(e)}")
+        
+        # 导入分析模块
+        try:
+            from .climate_analysis import analyze_climate_data
+        except ImportError as e:
+            raise ValueError(f"导入分析模块失败: {str(e)}")
+        
+        # 执行分析
+        logger.info(f"开始分析气候数据文件: {data_file.name}")
+        try:
+            preferred_metric = None if analysis_type == 'comprehensive' else analysis_type
+            analysis_result = analyze_climate_data(file_path, data_file.file_type, preferred_metric=preferred_metric)
+            
+            # 验证分析结果
+            if not analysis_result:
+                raise ValueError("分析结果为空")
+            
+            if 'error' in analysis_result:
+                raise ValueError(f"分析过程中出现错误: {analysis_result['error']}")
+            
+            # 验证必需的结果字段
+            required_fields = ['statistics', 'chart_data']
+            for field in required_fields:
+                if field not in analysis_result:
+                    logger.warning(f"分析结果缺少字段: {field}")
+            
+            logger.info("气候数据分析完成")
+            
+        except Exception as e:
+            logger.error(f"气候数据分析失败: {str(e)}")
+            raise ValueError(f"气候数据分析失败: {str(e)}")
+        
+        # 更新任务进度
+        try:
+            task.current_step = '保存分析结果'
+            task.progress = 80
+            task.save()
+        except Exception as e:
+            logger.warning(f"更新任务进度失败: {str(e)}")
+        
+        # 保存分析结果到数据库
+        try:
+            # 处理统计数据，将嵌套字典转换为扁平化字段
+            statistics = analysis_result.get('statistics', {})
+            if not statistics:
+                logger.warning("分析结果中缺少统计数据")
+                statistics = {}
+            
+            flat_stats = {}
+            for metric, values in statistics.items():
+                if isinstance(values, dict):
+                    for stat_type, value in values.items():
+                        field_name = f"{metric}_{stat_type}"
+                        flat_stats[field_name] = value
+                else:
+                    logger.warning(f"统计数据格式不正确: {metric} = {values}")
+            
+            # 验证图表数据
+            chart_data = analysis_result.get('chart_data', {})
+            if not chart_data:
+                logger.warning("分析结果中缺少图表数据")
+                chart_data = {}
+            
+            climate_result = ClimateAnalysisResult.objects.create(
+                data_file=data_file,
+                processing_task=task,
+                analysis_type=analysis_type,
+                chart_data=chart_data,
+                **flat_stats
+            )
+            
+            logger.info(f"分析结果保存成功: {climate_result.id}")
+            
+        except Exception as e:
+            logger.error(f"保存分析结果失败: {str(e)}")
+            raise ValueError(f"保存分析结果失败: {str(e)}")
+        
+        # 更新任务状态
+        task.status = 'completed'
+        task.completed_at = timezone.now()
+        task.current_step = '分析完成'
+        task.progress = 100
+        task.save()
+        
+        # 更新文件状态
+        data_file.status = 'completed'
+        data_file.processed_at = timezone.now()
+        data_file.save()
+        
+        logger.info(f"气候数据分析完成: {data_file.name}")
+        
+        return {
+            'status': 'success',
+            'message': '气候数据分析完成',
+            'result_id': str(climate_result.id)
+        }
+        
+    except Exception as e:
+        logger.error(f"气候数据分析失败: {str(e)}")
+        
+        # 更新任务状态为失败
+        if task:
+            task.status = 'failed'
+            task.error_message = str(e)
+            task.completed_at = timezone.now()
+            task.save()
+        
+        # 更新文件状态为失败
+        if data_file:
+            data_file.status = 'failed'
+            data_file.error_message = str(e)
+            data_file.save()
+        
+        return {
+            'status': 'error',
+            'message': f'气候数据分析失败: {str(e)}'
+        } 

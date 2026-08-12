@@ -14,7 +14,13 @@
           width: `${percentage}%`,
           backgroundColor: customColor || getDefaultColor(percentage)
         }"
+        :data-progress="percentage"
       ></div>
+      
+      <!-- 调试信息 -->
+      <!-- <div style="position: absolute; top: -20px; left: 0; font-size: 10px; color: red;">
+        调试: {{ percentage }}% (内部值: {{ internalValue }})
+      </div> -->
       
       <!-- 进度条标签 -->
       <div v-if="showLabel" class="progress-label">
@@ -168,13 +174,15 @@ const internalValue = ref(props.value)
 
 // 计算百分比
 const percentage = computed(() => {
-  return Math.max(0, Math.min(100, internalValue.value))
+  const value = Math.max(0, Math.min(100, internalValue.value))
+  // console.log(`ProgressBar - 内部值: ${internalValue.value}, 计算百分比: ${value}%`)
+  return value
 })
 
 // 监听外部值变化
 watch(() => props.value, (newValue) => {
   internalValue.value = newValue
-})
+}, { immediate: true })
 
 // 获取默认颜色
 function getDefaultColor(percent) {
@@ -250,6 +258,7 @@ defineExpose({
   border-radius: 4px;
   overflow: hidden;
   margin-bottom: 8px;
+  border: 1px solid #ddd; /* 添加边框以便调试 */
 }
 
 .progress-fill {
@@ -257,6 +266,9 @@ defineExpose({
   border-radius: 4px;
   transition: width 0.3s ease, background-color 0.3s ease;
   position: relative;
+  min-width: 0%; /* 确保最小宽度为0 */
+  max-width: 100%; /* 确保最大宽度不超过100% */
+  background-color: #409eff !important; /* 强制显示颜色 */
 }
 
 /* 进度条类型样式 */

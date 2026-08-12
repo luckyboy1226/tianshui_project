@@ -19,13 +19,47 @@ export const authService = {
   },
   
   // 获取用户信息
-  getProfile() {
-    return request.get(buildApiUrl(API_ENDPOINTS.AUTH.PROFILE))
+  getProfile(config = {}) {
+    return request.get(buildApiUrl(API_ENDPOINTS.AUTH.PROFILE), {}, config)
+  },
+
+  getCurrentUser(config = {}) {
+    return request.get(buildApiUrl(API_ENDPOINTS.AUTH.ME), {}, config)
+  },
+
+  getUsers(params = {}, config = {}) {
+    return request.get(buildApiUrl(API_ENDPOINTS.AUTH.USERS), params, config)
+  },
+
+  createUser(userData, config = {}) {
+    return request.post(buildApiUrl(API_ENDPOINTS.AUTH.USERS), userData, config)
+  },
+
+  updateUser(userId, userData, config = {}) {
+    return request.put(buildApiUrl(API_ENDPOINTS.AUTH.USER_DETAIL(userId)), userData, config)
+  },
+
+  deleteUser(userId, config = {}) {
+    return request.delete(buildApiUrl(API_ENDPOINTS.AUTH.USER_DETAIL(userId)), config)
+  },
+
+  getPermissionSchema(config = {}) {
+    return request.get(buildApiUrl(API_ENDPOINTS.AUTH.PERMISSION_SCHEMA), {}, config)
+  },
+
+  getUserPermissions(userId, config = {}) {
+    return request.get(buildApiUrl(API_ENDPOINTS.AUTH.USER_PERMISSIONS(userId)), {}, config)
+  },
+
+  assignUserPermissions(userId, permissions, config = {}) {
+    return request.put(buildApiUrl(API_ENDPOINTS.AUTH.USER_ASSIGN_PERMISSIONS(userId)), {
+      permissions
+    }, config)
   },
   
   // 用户登出
   logout() {
-    return request.post(buildApiUrl(API_ENDPOINTS.AUTH.LOGOUT))
+    return request.post(buildApiUrl(API_ENDPOINTS.AUTH.LOGOUT), {}, { skipAuth: true, silentError: true })
   },
   
   // 刷新token
@@ -54,7 +88,20 @@ export const remoteSensingService = {
     // 确保路径以斜杠开头，避免相对路径问题
     const url = buildApiUrl(API_ENDPOINTS.REMOTE_SENSING.UPLOAD);
     console.log('上传请求URL:', url);
-    return request.upload(url, formData)
+    return request.upload(url, formData, { skipAuth: true })
+  },
+
+  // 上传影像并直接计算指定指数，不要求先保存为系统图层
+  analyzeUpload(file, indexType = 'ndvi', metadata = {}) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('index_type', indexType)
+    Object.keys(metadata).forEach(key => {
+      if (metadata[key] !== null && metadata[key] !== undefined) {
+        formData.append(key, metadata[key])
+      }
+    })
+    return request.upload(buildApiUrl(API_ENDPOINTS.REMOTE_SENSING.ANALYZE_UPLOAD), formData, { skipAuth: true })
   },
   
   // 获取影像详情
@@ -76,15 +123,25 @@ export const remoteSensingService = {
   calculateIndices(imageId, indices = ['ndvi', 'ndwi', 'ndbi']) {
     const url = buildApiUrl(API_ENDPOINTS.REMOTE_SENSING.CALCULATE_INDICES(imageId));
     const data = { indices: indices };
-    
+
     console.log('calculateIndices 调用详情:', {
       url: url,
       data: data,
       imageId: imageId,
       indices: indices
     });
-    
+
     return request.post(url, data)
+  },
+
+  // 获取影像的生态指数结果
+  getIndices(imageId) {
+    const url = buildApiUrl(API_ENDPOINTS.REMOTE_SENSING.GET_INDICES(imageId));
+    console.log('getIndices 调用详情:', {
+      url: url,
+      imageId: imageId
+    });
+    return request.get(url)
   }
 }
 
@@ -160,6 +217,62 @@ export const spatialService = {
   getSpatialLayers() {
     return request.get(buildApiUrl(API_ENDPOINTS.SPATIAL.SPATIAL_LAYERS))
   },
+
+  // 获取系统高分影像列表
+  getHighResImageryList() {
+    return request.get(buildApiUrl(API_ENDPOINTS.SPATIAL.HIGHRES_IMAGERY_LIST), {}, { skipAuth: true })
+  },
+
+  // 发布系统高分影像到GeoServer
+  publishHighResImagery(data) {
+    return request.post(buildApiUrl(API_ENDPOINTS.SPATIAL.HIGHRES_IMAGERY_PUBLISH), data, { skipAuth: true })
+  },
+
+  // 获取已发布/已上传业务图层
+  getBusinessLayers(params = {}) {
+    return request.get(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYERS), params, { skipAuth: true })
+  },
+
+  // 上传业务图层并发布到GeoServer
+  uploadBusinessLayer(file, metadata = {}) {
+    const formData = new FormData()
+    formData.append('file', file)
+    formData.append('name', metadata.name || file.name.replace(/\.[^.]+$/, ''))
+    if (metadata.description) {
+      formData.append('description', metadata.description)
+    }
+    return request.upload(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYERS), formData, { skipAuth: true })
+  },
+
+  // 接入外部标准服务业务图层
+  createBusinessServiceLayer(data) {
+    return request.post(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYERS), data, { skipAuth: true })
+  },
+
+  // 重新发布业务图层
+  publishBusinessLayer(id) {
+    return request.post(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYER_PUBLISH(id)), {}, { skipAuth: true })
+  },
+
+  // 撤销GeoServer发布，保留上传记录
+  unpublishBusinessLayer(id) {
+    return request.post(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYER_UNPUBLISH(id)), {}, { skipAuth: true })
+  },
+
+  // 删除业务图层记录
+  deleteBusinessLayer(id) {
+    return request.delete(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYER_DETAIL(id)), { skipAuth: true })
+  },
+
+  // 更新业务图层样式
+  updateBusinessLayerStyle(id, data) {
+    return request.post(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYER_STYLE(id)), data, { skipAuth: true })
+  },
+
+  // 获取业务图层操作日志
+  getBusinessLayerLogs(id) {
+    return request.get(buildApiUrl(API_ENDPOINTS.SPATIAL.BUSINESS_LAYER_LOGS(id)), {}, { skipAuth: true })
+  },
   
   // 发布图层到GeoServer
   publishToGeoServer(data) {
@@ -172,11 +285,147 @@ export const spatialService = {
   }
 }
 
+// 民众意见反馈服务
+export const feedbackService = {
+  // 提交反馈
+  create(data) {
+    return request.post(buildApiUrl(API_ENDPOINTS.FEEDBACK.CREATE), data, { skipAuth: true })
+  },
+  // 获取反馈列表（可选：管理员查看）
+  getList(params = {}) {
+    return request.get(buildApiUrl(API_ENDPOINTS.FEEDBACK.LIST), params, { skipAuth: true })
+  },
+  // 获取反馈详情
+  getDetail(id) {
+    return request.get(buildApiUrl(API_ENDPOINTS.FEEDBACK.DETAIL(id)), {}, { skipAuth: true })
+  },
+  // 删除单条反馈
+  delete(id) {
+    return request.delete(buildApiUrl(API_ENDPOINTS.FEEDBACK.DELETE(id)), { skipAuth: true })
+  },
+  // 清空反馈记录
+  clear() {
+    return request.delete(buildApiUrl(API_ENDPOINTS.FEEDBACK.CLEAR), { skipAuth: true })
+  }
+}
+
+// 气候监测服务
+export const climateMonitoringService = {
+  // 上传气候数据文件
+  uploadClimateData(file, metadata = {}) {
+    // 验证文件
+    if (!file) {
+      return Promise.reject(new Error('文件不能为空'))
+    }
+    
+    if (!(file instanceof File)) {
+      return Promise.reject(new Error('无效的文件对象'))
+    }
+    
+    // 验证文件大小（栅格数据可能较大）
+    const maxSize = 20 * 1024 * 1024 * 1024
+    if (file.size > maxSize) {
+      return Promise.reject(new Error('文件大小不能超过20GB'))
+    }
+    
+    // 验证文件类型
+    const allowedTypes = ['.csv', '.xlsx', '.xls', '.tif', '.tiff', '.zip']
+    const fileExtension = file.name.toLowerCase().substring(file.name.lastIndexOf('.'))
+    const shapefileSidecars = ['.shp', '.dbf', '.shx', '.prj', '.cpg', '.sbn', '.sbx']
+    if (shapefileSidecars.includes(fileExtension)) {
+      return Promise.reject(new Error('请将完整 Shapefile 组件打包为一个 ZIP 后上传，系统会自动读取属性表进行气候统计分析'))
+    }
+    if (!allowedTypes.includes(fileExtension)) {
+      return Promise.reject(new Error('只支持 CSV、Excel、GeoTIFF、ADF 文件夹 ZIP，或完整 Shapefile ZIP'))
+    }
+    
+    const formData = new FormData()
+    formData.append('file', file)
+    
+    // 添加元数据
+    Object.keys(metadata).forEach(key => {
+      if (metadata[key] !== null && metadata[key] !== undefined) {
+        formData.append(key, metadata[key])
+      }
+    })
+    
+    return request.upload(buildApiUrl(API_ENDPOINTS.CLIMATE_MONITORING.UPLOAD), formData, { skipAuth: true })
+  },
+  
+  // 开始气候数据分析
+  analyzeClimateData(fileId, analysisType = 'comprehensive') {
+    // 验证文件ID
+    if (!fileId) {
+      return Promise.reject(new Error('文件ID不能为空'))
+    }
+    
+    if (typeof fileId !== 'string' && typeof fileId !== 'number') {
+      return Promise.reject(new Error('文件ID格式无效'))
+    }
+    
+    // 验证分析类型
+    const validAnalysisTypes = ['comprehensive', 'temperature', 'precipitation', 'humidity', 'wind', 'wind_speed']
+    if (!validAnalysisTypes.includes(analysisType)) {
+      return Promise.reject(new Error(`无效的分析类型: ${analysisType}`))
+    }
+    const normalizedAnalysisType = analysisType === 'wind_speed' ? 'wind' : analysisType
+    
+    return request.post(buildApiUrl(API_ENDPOINTS.CLIMATE_MONITORING.ANALYZE), {
+      file_id: fileId,
+      analysis_type: normalizedAnalysisType
+    }, { skipAuth: true })
+  },
+  
+  // 获取分析结果
+  getAnalysisResults(taskId) {
+    // 验证任务ID
+    if (!taskId) {
+      return Promise.reject(new Error('任务ID不能为空'))
+    }
+    
+    if (typeof taskId !== 'string' && typeof taskId !== 'number') {
+      return Promise.reject(new Error('任务ID格式无效'))
+    }
+    
+    return request.get(buildApiUrl(API_ENDPOINTS.CLIMATE_MONITORING.RESULTS(taskId)), {}, { skipAuth: true })
+  },
+  
+  // 获取分析状态
+  getAnalysisStatus(taskId) {
+    // 验证任务ID
+    if (!taskId) {
+      return Promise.reject(new Error('任务ID不能为空'))
+    }
+    
+    if (typeof taskId !== 'string' && typeof taskId !== 'number') {
+      return Promise.reject(new Error('任务ID格式无效'))
+    }
+    
+    return request.get(buildApiUrl(API_ENDPOINTS.CLIMATE_MONITORING.STATUS(taskId)), {}, { skipAuth: true })
+  },
+  
+  // 下载分析报告
+  downloadReport(taskId) {
+    // 验证任务ID
+    if (!taskId) {
+      return Promise.reject(new Error('任务ID不能为空'))
+    }
+    
+    if (typeof taskId !== 'string' && typeof taskId !== 'number') {
+      return Promise.reject(new Error('任务ID格式无效'))
+    }
+    
+    return request.download(buildApiUrl(API_ENDPOINTS.CLIMATE_MONITORING.DOWNLOAD_REPORT(taskId)))
+  }
+}
+
 // 导出所有服务
 export default {
   auth: authService,
   remoteSensing: remoteSensingService,
   ecologicalIndices: ecologicalIndicesService,
   processingTask: processingTaskService,
-  spatial: spatialService
+  spatial: spatialService,
+  feedback: feedbackService,
+  climateMonitoring: climateMonitoringService
 }

@@ -1,0 +1,593 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>重大工程叠加分析演示</title>
+    <style>
+        body {
+            font-family: 'Microsoft YaHei', Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f5f5f5;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            padding: 30px;
+            border-radius: 10px;
+            box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+        }
+
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+
+        .section {
+            margin-bottom: 30px;
+            padding: 20px;
+            border: 1px solid #ddd;
+            border-radius: 8px;
+            background: #fafafa;
+        }
+
+        .section h2 {
+            color: #34495e;
+            margin-top: 0;
+        }
+
+        .upload-area {
+            border: 2px dashed #3498db;
+            padding: 20px;
+            text-align: center;
+            border-radius: 8px;
+            margin: 10px 0;
+        }
+
+        .file-input {
+            margin: 10px 0;
+        }
+
+        .btn {
+            background: #3498db;
+            color: white;
+            padding: 10px 20px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            margin: 5px;
+        }
+
+        .btn:hover {
+            background: #2980b9;
+        }
+
+        .btn-success {
+            background: #27ae60;
+        }
+
+        .btn-success:hover {
+            background: #229954;
+        }
+
+        .btn-danger {
+            background: #e74c3c;
+        }
+
+        .btn-danger:hover {
+            background: #c0392b;
+        }
+
+        .result-area {
+            background: white;
+            padding: 20px;
+            border-radius: 8px;
+            margin-top: 20px;
+        }
+
+        .risk-level {
+            padding: 10px;
+            border-radius: 5px;
+            margin: 10px 0;
+            font-weight: bold;
+        }
+
+        .risk-low {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .risk-medium {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .risk-high {
+            background: #f8d7da;
+            color: #721c24;
+        }
+
+        .risk-critical {
+            background: #f5c6cb;
+            color: #721c24;
+        }
+
+        .progress-bar {
+            width: 100%;
+            height: 20px;
+            background: #ecf0f1;
+            border-radius: 10px;
+            overflow: hidden;
+            margin: 10px 0;
+        }
+
+        .progress-fill {
+            height: 100%;
+            background: #3498db;
+            transition: width 0.3s ease;
+        }
+
+        .file-list {
+            margin: 10px 0;
+        }
+
+        .file-item {
+            padding: 10px;
+            background: white;
+            margin: 5px 0;
+            border-radius: 5px;
+            border: 1px solid #ddd;
+        }
+
+        .status {
+            padding: 3px 8px;
+            border-radius: 3px;
+            font-size: 12px;
+            font-weight: bold;
+        }
+
+        .status-uploaded {
+            background: #cce5ff;
+            color: #004085;
+        }
+
+        .status-completed {
+            background: #d4edda;
+            color: #155724;
+        }
+
+        .status-processing {
+            background: #fff3cd;
+            color: #856404;
+        }
+
+        .status-failed {
+            background: #f8d7da;
+            color: #721c24;
+        }
+    </style>
+</head>
+
+<body>
+    <div class="container">
+        <h1>🌍 重大工程叠加分析系统</h1>
+
+        <!-- 文件上传区域 -->
+        <div class="section">
+            <h2>📁 文件上传</h2>
+
+            <div style="display: flex; gap: 20px;">
+                <div style="flex: 1;">
+                    <h3>生态指数文件 (JSON)</h3>
+                    <div class="upload-area">
+                        <input type="file" id="ecologicalIndexFile" accept=".json" class="file-input">
+                        <button onclick="uploadEcologicalIndexFile()" class="btn">上传生态指数文件</button>
+                    </div>
+                    <div id="indexFileList" class="file-list"></div>
+                </div>
+
+                <div style="flex: 1;">
+                    <h3>生态修复工程文件 (GeoJSON)</h3>
+                    <div class="upload-area">
+                        <input type="file" id="ecologicalProjectFile" accept=".json" class="file-input">
+                        <button onclick="uploadEcologicalProjectFile()" class="btn">上传工程文件</button>
+                    </div>
+                    <div id="projectFileList" class="file-list"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- 分析任务区域 -->
+        <div class="section">
+            <h2>🔍 叠加分析</h2>
+            <div style="margin: 20px 0;">
+                <label>选择生态指数文件:</label>
+                <select id="selectedIndexFile" style="margin: 0 10px; padding: 5px;"></select>
+
+                <label>选择工程文件:</label>
+                <select id="selectedProjectFile" style="margin: 0 10px; padding: 5px;"></select>
+
+                <button onclick="createAnalysisTask()" class="btn btn-success">开始分析</button>
+            </div>
+
+            <div id="analysisProgress" style="display: none;">
+                <h4>分析进度</h4>
+                <div class="progress-bar">
+                    <div id="progressFill" class="progress-fill" style="width: 0%"></div>
+                </div>
+                <div id="progressText">准备中...</div>
+            </div>
+        </div>
+
+        <!-- 分析结果区域 -->
+        <div class="section">
+            <h2>📊 分析结果</h2>
+            <div id="analysisResults" class="result-area">
+                <p style="text-align: center; color: #7f8c8d;">暂无分析结果，请先上传文件并执行分析</p>
+            </div>
+        </div>
+
+        <!-- 历史任务区域 -->
+        <div class="section">
+            <h2>📋 历史任务</h2>
+            <button onclick="loadHistoryTasks()" class="btn">刷新任务列表</button>
+            <div id="historyTasks" class="file-list"></div>
+        </div>
+    </div>
+
+    <script>
+        const API_BASE = '/api/v1/environment';
+
+        // 页面加载时初始化
+        document.addEventListener('DOMContentLoaded', function () {
+            loadFileList();
+            loadHistoryTasks();
+        });
+
+        // 上传生态指数文件
+        async function uploadEcologicalIndexFile() {
+            const fileInput = document.getElementById('ecologicalIndexFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('请选择文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('filename', file.name);
+            formData.append('description', '生态指数数据文件');
+
+            try {
+                const response = await fetch(`${API_BASE}/ecological-index-files/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    alert('生态指数文件上传成功！');
+                    loadFileList();
+                    fileInput.value = '';
+                } else {
+                    alert('上传失败：' + response.statusText);
+                }
+            } catch (error) {
+                alert('上传错误：' + error.message);
+            }
+        }
+
+        // 上传生态修复工程文件
+        async function uploadEcologicalProjectFile() {
+            const fileInput = document.getElementById('ecologicalProjectFile');
+            const file = fileInput.files[0];
+
+            if (!file) {
+                alert('请选择文件');
+                return;
+            }
+
+            const formData = new FormData();
+            formData.append('file', file);
+            formData.append('filename', file.name);
+            formData.append('description', '生态修复工程项目数据文件');
+
+            try {
+                const response = await fetch(`${API_BASE}/ecological-project-files/`, {
+                    method: 'POST',
+                    body: formData
+                });
+
+                if (response.ok) {
+                    alert('工程文件上传成功！');
+                    loadFileList();
+                    fileInput.value = '';
+                } else {
+                    alert('上传失败：' + response.statusText);
+                }
+            } catch (error) {
+                alert('上传错误：' + error.message);
+            }
+        }
+
+        // 加载文件列表
+        async function loadFileList() {
+            try {
+                // 加载生态指数文件
+                const indexResponse = await fetch(`${API_BASE}/ecological-index-files/`);
+                const indexData = await indexResponse.json();
+                console.log('生态指数文件数据:', indexData);
+
+                // 处理分页响应格式
+                const indexFiles = Array.isArray(indexData) ? indexData : (indexData.results || []);
+
+                const indexFileList = document.getElementById('indexFileList');
+                const selectedIndexFile = document.getElementById('selectedIndexFile');
+
+                indexFileList.innerHTML = '';
+                selectedIndexFile.innerHTML = '<option value="">请选择文件</option>';
+
+                indexFiles.forEach(file => {
+                    console.log('处理文件:', file.filename, '状态:', file.status);
+
+                    // 文件列表显示
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <strong>${file.filename}</strong>
+                        <span class="status status-${file.status}">${file.status_display}</span>
+                        <br><small>${file.description || '无描述'}</small>
+                    `;
+                    indexFileList.appendChild(fileItem);
+
+                    // 下拉选择框 - 显示已上传或已完成的文件
+                    if (file.status === 'completed' || file.status === 'uploaded') {
+                        console.log('添加到下拉选择框:', file.filename);
+                        const option = document.createElement('option');
+                        option.value = file.id;
+                        option.textContent = file.filename;
+                        selectedIndexFile.appendChild(option);
+                    } else {
+                        console.log('文件状态不符合条件:', file.filename, file.status);
+                    }
+                });
+
+                // 加载工程文件
+                const projectResponse = await fetch(`${API_BASE}/ecological-project-files/`);
+                const projectData = await projectResponse.json();
+                console.log('生态工程文件数据:', projectData);
+
+                // 处理分页响应格式
+                const projectFiles = Array.isArray(projectData) ? projectData : (projectData.results || []);
+
+                const projectFileList = document.getElementById('projectFileList');
+                const selectedProjectFile = document.getElementById('selectedProjectFile');
+
+                projectFileList.innerHTML = '';
+                selectedProjectFile.innerHTML = '<option value="">请选择文件</option>';
+
+                projectFiles.forEach(file => {
+                    // 文件列表显示
+                    const fileItem = document.createElement('div');
+                    fileItem.className = 'file-item';
+                    fileItem.innerHTML = `
+                        <strong>${file.filename}</strong>
+                        <span class="status status-${file.status}">${file.status_display}</span>
+                        <br><small>${file.description || '无描述'}</small>
+                    `;
+                    projectFileList.appendChild(fileItem);
+
+                    // 下拉选择框 - 显示已上传或已完成的文件
+                    if (file.status === 'completed' || file.status === 'uploaded') {
+                        const option = document.createElement('option');
+                        option.value = file.id;
+                        option.textContent = file.filename;
+                        selectedProjectFile.appendChild(option);
+                    }
+                });
+
+            } catch (error) {
+                console.error('加载文件列表失败：', error);
+            }
+        }
+
+        // 创建分析任务
+        async function createAnalysisTask() {
+            const indexFileId = document.getElementById('selectedIndexFile').value;
+            const projectFileId = document.getElementById('selectedProjectFile').value;
+
+            if (!indexFileId || !projectFileId) {
+                alert('请选择生态指数文件和工程文件');
+                return;
+            }
+
+            const taskData = {
+                name: `叠加分析任务_${new Date().toLocaleString()}`,
+                description: '生态指数与修复工程项目的叠加影响分析',
+                ecological_index_file: indexFileId,
+                ecological_project_file: projectFileId
+            };
+
+            try {
+                document.getElementById('analysisProgress').style.display = 'block';
+                updateProgress(10, '创建分析任务...');
+
+                const response = await fetch(`${API_BASE}/overlay-analysis-tasks/`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(taskData)
+                });
+
+                if (response.ok) {
+                    const task = await response.json();
+                    updateProgress(50, '分析任务已创建，正在执行...');
+
+                    // 轮询任务状态
+                    pollTaskStatus(task.id);
+                } else {
+                    alert('创建分析任务失败：' + response.statusText);
+                    document.getElementById('analysisProgress').style.display = 'none';
+                }
+            } catch (error) {
+                alert('创建任务错误：' + error.message);
+                document.getElementById('analysisProgress').style.display = 'none';
+            }
+        }
+
+        // 轮询任务状态
+        async function pollTaskStatus(taskId) {
+            try {
+                const response = await fetch(`${API_BASE}/overlay-analysis-tasks/${taskId}/`);
+                const task = await response.json();
+
+                updateProgress(task.progress, task.current_step || '处理中...');
+
+                if (task.status === 'completed') {
+                    updateProgress(100, '分析完成！');
+                    displayAnalysisResults(task);
+                    loadHistoryTasks();
+                    setTimeout(() => {
+                        document.getElementById('analysisProgress').style.display = 'none';
+                    }, 2000);
+                } else if (task.status === 'failed') {
+                    updateProgress(0, '分析失败：' + (task.error_message || '未知错误'));
+                    setTimeout(() => {
+                        document.getElementById('analysisProgress').style.display = 'none';
+                    }, 3000);
+                } else {
+                    // 继续轮询
+                    setTimeout(() => pollTaskStatus(taskId), 2000);
+                }
+            } catch (error) {
+                console.error('轮询任务状态失败：', error);
+                setTimeout(() => pollTaskStatus(taskId), 5000);
+            }
+        }
+
+        // 更新进度
+        function updateProgress(progress, text) {
+            document.getElementById('progressFill').style.width = progress + '%';
+            document.getElementById('progressText').textContent = text;
+        }
+
+        // 显示分析结果
+        function displayAnalysisResults(task) {
+            const resultsDiv = document.getElementById('analysisResults');
+
+            if (!task.analysis_results) {
+                resultsDiv.innerHTML = '<p>分析结果为空</p>';
+                return;
+            }
+
+            const results = task.analysis_results;
+            const summary = results.analysis_summary || {};
+            const riskAnalysis = results.risk_analysis || {};
+            const monitoring = results.monitoring_recommendations || {};
+
+            let html = `
+                <h3>📈 分析摘要</h3>
+                <div class="risk-level risk-${summary.overall_risk_level || 'low'}">
+                    总体风险等级: ${summary.overall_risk_level || '未知'} 
+                    (风险分数: ${(summary.overall_risk_score || 0).toFixed(2)})
+                </div>
+                <p><strong>高风险因子数量:</strong> ${summary.high_risk_count || 0}</p>
+                <p><strong>总风险因子数量:</strong> ${summary.total_risk_factors || 0}</p>
+                <p><strong>分析时间:</strong> ${summary.analysis_date || '未知'}</p>
+            `;
+
+            // 风险分析详情
+            if (riskAnalysis.risk_levels) {
+                html += '<h3>🔍 风险分析详情</h3>';
+                for (const [riskType, riskInfo] of Object.entries(riskAnalysis.risk_levels)) {
+                    html += `
+                        <div class="risk-level risk-${riskInfo.level}">
+                            <strong>${riskType}:</strong> ${riskInfo.level} 
+                            (分数: ${(riskInfo.score || 0).toFixed(2)})
+                            <br><small>${riskInfo.description || ''}</small>
+                        </div>
+                    `;
+                }
+            }
+
+            // 监控建议
+            if (monitoring.monitoring_frequency) {
+                html += '<h3>📋 监控建议</h3>';
+                html += `<p><strong>监控频率:</strong> ${monitoring.monitoring_frequency}</p>`;
+
+                if (monitoring.key_indicators && monitoring.key_indicators.length > 0) {
+                    html += `<p><strong>关键指标:</strong> ${monitoring.key_indicators.join(', ')}</p>`;
+                }
+
+                if (monitoring.recommended_actions && monitoring.recommended_actions.length > 0) {
+                    html += '<p><strong>推荐行动:</strong></p><ul>';
+                    monitoring.recommended_actions.slice(0, 5).forEach(action => {
+                        html += `<li>${action.action} (优先级: ${action.priority}, 时限: ${action.timeline})</li>`;
+                    });
+                    html += '</ul>';
+                }
+            }
+
+            resultsDiv.innerHTML = html;
+        }
+
+        // 加载历史任务
+        async function loadHistoryTasks() {
+            try {
+                const response = await fetch(`${API_BASE}/overlay-analysis-tasks/`);
+                const taskData = await response.json();
+                console.log('历史任务数据:', taskData);
+
+                // 处理分页响应格式
+                const tasks = Array.isArray(taskData) ? taskData : (taskData.results || []);
+
+                const historyDiv = document.getElementById('historyTasks');
+                historyDiv.innerHTML = '';
+
+                if (tasks.length === 0) {
+                    historyDiv.innerHTML = '<p style="text-align: center; color: #7f8c8d;">暂无历史任务</p>';
+                    return;
+                }
+
+                tasks.forEach(task => {
+                    const taskItem = document.createElement('div');
+                    taskItem.className = 'file-item';
+                    taskItem.innerHTML = `
+                        <strong>${task.name}</strong>
+                        <span class="status status-${task.status}">${task.status_display}</span>
+                        ${task.overall_risk_level ? `<span class="risk-level risk-${task.overall_risk_level}" style="margin-left: 10px; padding: 2px 6px; font-size: 12px;">${task.overall_risk_level}</span>` : ''}
+                        <br><small>${task.description || '无描述'}</small>
+                        <br><small>创建时间: ${new Date(task.created_at).toLocaleString()}</small>
+                        ${task.status === 'completed' ? `<button onclick="viewTaskResult('${task.id}')" class="btn" style="margin-top: 5px; padding: 5px 10px; font-size: 12px;">查看结果</button>` : ''}
+                    `;
+                    historyDiv.appendChild(taskItem);
+                });
+
+            } catch (error) {
+                console.error('加载历史任务失败：', error);
+            }
+        }
+
+        // 查看任务结果
+        async function viewTaskResult(taskId) {
+            try {
+                const response = await fetch(`${API_BASE}/overlay-analysis-tasks/${taskId}/`);
+                const task = await response.json();
+                displayAnalysisResults(task);
+
+                // 滚动到结果区域
+                document.getElementById('analysisResults').scrollIntoView({ behavior: 'smooth' });
+            } catch (error) {
+                alert('加载任务结果失败：' + error.message);
+            }
+        }
+    </script>
+</body>
+
+</html>

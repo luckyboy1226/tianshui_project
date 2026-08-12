@@ -31,7 +31,8 @@
 ### 后端技术
 - **Django 5.2.4** - Web框架
 - **Django REST Framework** - API开发
-- **PostgreSQL + PostGIS** - 空间数据库
+- **PostgreSQL** - 主数据库
+- **PostGIS（可选）** - PostgreSQL 空间扩展
 - **Celery + Redis** - 异步任务处理
 - **GeoServer** - 地理空间数据服务
 
@@ -51,7 +52,8 @@
 
 ### 环境要求
 - Python 3.8+
-- PostgreSQL 12+ with PostGIS
+- PostgreSQL 12+
+- PostGIS（可选，启用空间数据库能力时安装）
 - Redis 6+
 - GDAL 3.6+
 
@@ -73,7 +75,7 @@ venv\Scripts\activate  # Windows
 
 3. **安装依赖**
 ```bash
-pip install -r requirements.txt
+pip install -r requirements_dev.txt
 ```
 
 4. **配置数据库**
@@ -81,15 +83,14 @@ pip install -r requirements.txt
 # 创建PostgreSQL数据库
 createdb tianshuipy_db
 
-# 启用PostGIS扩展
+# 如果需要空间扩展，再启用PostGIS
 psql -d tianshuipy_db -c "CREATE EXTENSION postgis;"
 ```
 
 5. **配置环境变量**
 ```bash
-# 创建.env文件
-cp .env.example .env
-# 编辑.env文件，设置数据库连接等信息
+# 参考 .env.example 按需创建 .env
+# Windows 下可手工复制 backend/.env.example 为 backend/.env
 ```
 
 6. **数据库迁移**
@@ -105,14 +106,8 @@ python manage.py create_superuser
 
 8. **启动服务**
 ```bash
-# 启动Redis
-redis-server
-
-# 启动Celery Worker
-celery -A tianshuipy worker -l info
-
-# 启动Django开发服务器
-python manage.py runserver
+# Windows 交付/演示环境推荐直接使用项目脚本
+..\start_dev.ps1
 ```
 
 ## API文档
@@ -215,6 +210,14 @@ tianshuipy/
 2. 缓存策略配置
 3. 静态文件CDN加速
 4. 异步任务队列优化
+
+## 交付提醒
+
+- 不要把真实账号密码、数据库口令、GeoServer 密码写进仓库文本文件。
+- 首次交付请使用 `python manage.py create_superuser --username <用户名> --email <邮箱>` 创建管理员；如果不传 `--password`，命令会自动生成安全随机密码。
+- 默认 `manage.py` 使用 `tianshuipy.settings_dev`，适合 SQLite 单机运行；如需 PostgreSQL，请显式设置 `DJANGO_SETTINGS_MODULE=tianshuipy.settings_postgresql`。
+- `settings_postgresql` 现在默认要求配置 `SECRET_KEY`，并默认关闭匿名用户注册、匿名分析上传、匿名业务图层发布/删除、匿名叠加分析管理。
+- 如需保留现场演示体验，可在 `.env` 中按需打开这些开关：`ALLOW_PUBLIC_USER_REGISTRATION`、`ALLOW_ANONYMOUS_ANALYSIS_UPLOADS`、`ALLOW_ANONYMOUS_BUSINESS_LAYER_ADMIN`、`ALLOW_ANONYMOUS_OVERLAY_ADMIN`、`ALLOW_PUBLIC_FEEDBACK_MANAGEMENT`。
 
 ## 许可证
 

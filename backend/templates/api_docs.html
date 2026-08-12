@@ -1,0 +1,276 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>天水平台 API 文档</title>
+    <style>
+        :root {
+            color-scheme: light;
+            --bg: #f3f6f3;
+            --card: #ffffff;
+            --text: #173124;
+            --muted: #5a6d63;
+            --accent: #1f7a59;
+            --border: #d7e2da;
+            --method-get: #166534;
+            --method-post: #1d4ed8;
+            --method-put: #9a3412;
+            --method-patch: #7c3aed;
+            --method-delete: #b91c1c;
+        }
+
+        * {
+            box-sizing: border-box;
+        }
+
+        body {
+            margin: 0;
+            font-family: "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+            background:
+                radial-gradient(circle at top left, rgba(31, 122, 89, 0.12), transparent 28rem),
+                linear-gradient(180deg, #f8fbf8 0%, var(--bg) 100%);
+            color: var(--text);
+        }
+
+        .wrap {
+            width: min(1100px, calc(100% - 32px));
+            margin: 0 auto;
+            padding: 40px 0 56px;
+        }
+
+        .hero,
+        .card {
+            background: rgba(255, 255, 255, 0.92);
+            border: 1px solid var(--border);
+            border-radius: 20px;
+            box-shadow: 0 20px 60px rgba(23, 49, 36, 0.08);
+            backdrop-filter: blur(10px);
+        }
+
+        .hero {
+            padding: 28px;
+            margin-bottom: 20px;
+        }
+
+        h1 {
+            margin: 0 0 12px;
+            font-size: clamp(28px, 4vw, 42px);
+        }
+
+        p {
+            margin: 0;
+            color: var(--muted);
+            line-height: 1.7;
+        }
+
+        .links {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 12px;
+            margin-top: 18px;
+        }
+
+        .button {
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 42px;
+            padding: 0 16px;
+            border-radius: 999px;
+            border: 1px solid var(--accent);
+            text-decoration: none;
+            color: var(--accent);
+            font-weight: 600;
+            background: #eef8f3;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: 280px 1fr;
+            gap: 20px;
+        }
+
+        .card {
+            padding: 22px;
+        }
+
+        .sidebar h2,
+        .content h2 {
+            margin: 0 0 14px;
+            font-size: 18px;
+        }
+
+        .sidebar ul {
+            list-style: none;
+            padding: 0;
+            margin: 0;
+        }
+
+        .sidebar li + li {
+            margin-top: 10px;
+        }
+
+        .sidebar a {
+            color: var(--text);
+            text-decoration: none;
+        }
+
+        .endpoint {
+            padding: 16px 0;
+            border-top: 1px solid var(--border);
+        }
+
+        .endpoint:first-child {
+            border-top: none;
+            padding-top: 0;
+        }
+
+        .endpoint-header {
+            display: flex;
+            flex-wrap: wrap;
+            align-items: center;
+            gap: 12px;
+            margin-bottom: 8px;
+        }
+
+        .method {
+            min-width: 72px;
+            padding: 6px 10px;
+            border-radius: 999px;
+            color: #fff;
+            font-size: 12px;
+            font-weight: 700;
+            text-align: center;
+            letter-spacing: 0.05em;
+        }
+
+        .method-get { background: var(--method-get); }
+        .method-post { background: var(--method-post); }
+        .method-put { background: var(--method-put); }
+        .method-patch { background: var(--method-patch); }
+        .method-delete { background: var(--method-delete); }
+
+        .path {
+            font-family: Consolas, "Courier New", monospace;
+            font-size: 14px;
+            word-break: break-all;
+        }
+
+        .summary {
+            margin-bottom: 6px;
+            color: var(--text);
+            font-weight: 600;
+        }
+
+        .description {
+            color: var(--muted);
+        }
+
+        .loading,
+        .error {
+            color: var(--muted);
+        }
+
+        @media (max-width: 900px) {
+            .grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="wrap">
+        <section class="hero">
+            <h1>天水平台 API 文档</h1>
+            <p>这里展示的是项目当前后端接口的本地文档页，不再依赖旧的 <code>coreapi</code>。页面会直接读取 OpenAPI schema 并渲染主要接口。</p>
+            <div class="links">
+                <a class="button" href="{{ schema_url }}" target="_blank" rel="noopener">打开原始 Schema JSON</a>
+                <a class="button" href="/api/v1/">打开 API 根路径</a>
+                <a class="button" href="/">返回首页</a>
+            </div>
+        </section>
+
+        <div class="grid">
+            <aside class="card sidebar">
+                <h2>主要入口</h2>
+                <ul>
+                    <li><a href="/api/v1/users/">用户接口</a></li>
+                    <li><a href="/api/v1/environment/">环境与分析接口</a></li>
+                    <li><a href="/admin/">Django 管理后台</a></li>
+                    <li><a href="{{ schema_url }}" target="_blank" rel="noopener">OpenAPI Schema</a></li>
+                </ul>
+            </aside>
+
+            <section class="card content">
+                <h2>接口列表</h2>
+                <div id="status" class="loading">正在加载接口定义...</div>
+                <div id="endpoints"></div>
+            </section>
+        </div>
+    </div>
+
+    <script>
+        async function loadSchema() {
+            const status = document.getElementById('status');
+            const container = document.getElementById('endpoints');
+
+            try {
+                const response = await fetch('{{ schema_url }}', {
+                    headers: {
+                        'Accept': 'application/json'
+                    }
+                });
+
+                if (!response.ok) {
+                    throw new Error('HTTP ' + response.status);
+                }
+
+                const schema = await response.json();
+                const entries = [];
+
+                Object.entries(schema.paths || {}).forEach(([path, methods]) => {
+                    Object.entries(methods || {}).forEach(([method, meta]) => {
+                        entries.push({
+                            path,
+                            method: method.toUpperCase(),
+                            summary: meta.summary || meta.operationId || '未命名接口',
+                            description: meta.description || '无补充说明'
+                        });
+                    });
+                });
+
+                entries.sort((a, b) => {
+                    if (a.path === b.path) {
+                        return a.method.localeCompare(b.method);
+                    }
+                    return a.path.localeCompare(b.path);
+                });
+
+                status.textContent = `共加载 ${entries.length} 个接口操作`;
+
+                if (!entries.length) {
+                    container.innerHTML = '<p class="error">当前 schema 中没有可展示的接口。</p>';
+                    return;
+                }
+
+                container.innerHTML = entries.map((item) => `
+                    <article class="endpoint">
+                        <div class="endpoint-header">
+                            <span class="method method-${item.method.toLowerCase()}">${item.method}</span>
+                            <span class="path">${item.path}</span>
+                        </div>
+                        <div class="summary">${item.summary}</div>
+                        <div class="description">${item.description}</div>
+                    </article>
+                `).join('');
+            } catch (error) {
+                status.textContent = '接口定义加载失败';
+                container.innerHTML = `<p class="error">无法读取 schema：${error.message}</p>`;
+            }
+        }
+
+        loadSchema();
+    </script>
+</body>
+</html>

@@ -1,0 +1,507 @@
+.remote-sensing-analysis,
+.ecological-analysis,
+.overlay-analysis,
+.climate-monitoring,
+.feedback-page-apple {
+  --biz-primary: #5f7f9d;
+  --biz-primary-strong: #315f8c;
+  --biz-panel: #ffffff;
+  --biz-page: #f4f7fa;
+  --biz-border: #dbe3ec;
+  --biz-border-soft: #edf2f7;
+  --biz-text: #26384a;
+  --biz-muted: #667789;
+  --biz-soft: #eef4f9;
+  color: var(--biz-text);
+}
+
+.remote-sensing-analysis .control-panel,
+.ecological-analysis .left-panel,
+.overlay-analysis .left-panel,
+.climate-monitoring .left-panel {
+  width: 350px;
+  background: var(--biz-panel);
+  border-right: 1px solid var(--biz-border);
+  box-shadow: 2px 0 10px rgba(30, 50, 70, 0.08);
+}
+
+.remote-sensing-analysis .result-area,
+.ecological-analysis .right-panel,
+.overlay-analysis .map-area,
+.climate-monitoring .right-panel {
+  background: var(--biz-page);
+}
+
+.remote-sensing-analysis .panel-header,
+.ecological-analysis .panel-header,
+.overlay-analysis .panel-header,
+.climate-monitoring .panel-header,
+.data-upload-panel .panel-header {
+  background: #1890ff;
+  color: #ffffff;
+  border-bottom: 1px solid var(--biz-border);
+  box-shadow: none;
+  text-align: left;
+}
+
+.remote-sensing-analysis .panel-header h1,
+.ecological-analysis .panel-header h1,
+.overlay-analysis .panel-header h1,
+.climate-monitoring .panel-header h1,
+.data-upload-panel .panel-header h3 {
+  color: #ffffff;
+  font-size: 16px;
+  font-weight: 700;
+  letter-spacing: 0;
+}
+
+.remote-sensing-analysis .panel-header p,
+.ecological-analysis .panel-header p,
+.overlay-analysis .panel-header p,
+.climate-monitoring .panel-header p,
+.remote-sensing-analysis .panel-subtitle {
+  color: rgba(255, 255, 255, 0.86);
+  opacity: 1;
+}
+
+.remote-sensing-analysis .section,
+.ecological-analysis .section,
+.overlay-analysis .section,
+.climate-monitoring .section {
+  padding: 16px;
+  border-bottom: 1px solid var(--biz-border-soft);
+}
+
+.remote-sensing-analysis .section-title,
+.ecological-analysis .section-header,
+.overlay-analysis .section-header,
+.climate-monitoring .section-header {
+  color: var(--biz-text);
+  font-size: 14px;
+  font-weight: 700;
+  margin-bottom: 12px;
+}
+
+.remote-sensing-analysis .section-icon,
+.ecological-analysis .section-icon,
+.overlay-analysis .section-icon,
+.climate-monitoring .section-icon {
+  color: var(--biz-primary);
+  font-size: 15px;
+}
+
+.remote-sensing-analysis .upload-zone,
+.ecological-analysis .upload-zone,
+.climate-monitoring .upload-zone,
+.data-upload-panel .upload-zone {
+  background: #f8fbfd;
+  border: 1px dashed #cbd8e4;
+  border-radius: 8px;
+  padding: 20px 14px;
+  box-shadow: none;
+}
+
+.remote-sensing-analysis .upload-zone:hover,
+.ecological-analysis .upload-zone:hover,
+.climate-monitoring .upload-zone:hover,
+.data-upload-panel .upload-zone:hover {
+  background: var(--biz-soft);
+  border-color: #9bb6cf;
+  box-shadow: none;
+}
+
+.remote-sensing-analysis .upload-icon svg path,
+.ecological-analysis .upload-icon svg path,
+.climate-monitoring .upload-icon svg path,
+.data-upload-panel .upload-icon svg path {
+  stroke: var(--biz-primary);
+}
+
+.remote-sensing-analysis .upload-text,
+.ecological-analysis .upload-text,
+.climate-monitoring .upload-text,
+.data-upload-panel .upload-text {
+  color: var(--biz-text);
+  font-size: 13px;
+}
+
+.remote-sensing-analysis .upload-hint,
+.remote-sensing-analysis .upload-types,
+.ecological-analysis .upload-hint,
+.ecological-analysis .upload-types,
+.climate-monitoring .upload-hint,
+.climate-monitoring .upload-types,
+.data-upload-panel .upload-hint,
+.data-upload-panel .upload-types {
+  color: var(--biz-muted);
+}
+
+.remote-sensing-analysis .analysis-btn,
+.remote-sensing-analysis .cache-btn,
+.ecological-analysis .start-analysis-btn,
+.climate-monitoring .analysis-btn,
+.data-upload-panel .upload-btn {
+  border-radius: 7px;
+  border: 1px solid var(--biz-primary);
+  background: var(--biz-primary);
+  color: #fff;
+  box-shadow: none;
+  transform: none;
+}
+
+.remote-sensing-analysis .analysis-btn:hover:not(:disabled),
+.remote-sensing-analysis .cache-btn:hover,
+.ecological-analysis .start-analysis-btn:hover:not(:disabled),
+.climate-monitoring .analysis-btn:hover:not(.disabled),
+.data-upload-panel .upload-btn:hover:not(:disabled) {
+  background: var(--biz-primary-strong);
+  border-color: var(--biz-primary-strong);
+  box-shadow: none;
+  transform: none;
+}
+
+.remote-sensing-analysis .index-btn,
+.ecological-analysis .index-btn,
+.data-upload-panel .type-tab {
+  border-radius: 7px;
+  border: 1px solid var(--biz-border);
+  background: #fff;
+  color: var(--biz-text);
+  box-shadow: none;
+}
+
+.remote-sensing-analysis .index-btn:hover:not(:disabled),
+.ecological-analysis .index-btn:hover:not(:disabled),
+.data-upload-panel .type-tab:hover {
+  background: var(--biz-soft);
+  border-color: #9bb6cf;
+  color: var(--biz-primary-strong);
+  transform: none;
+}
+
+.remote-sensing-analysis .index-btn.active,
+.data-upload-panel .type-tab.active {
+  background: var(--biz-soft);
+  border-color: var(--biz-primary);
+  color: var(--biz-primary-strong);
+  box-shadow: inset 3px 0 0 var(--biz-primary);
+}
+
+.remote-sensing-analysis .result-area,
+.ecological-analysis .right-panel,
+.climate-monitoring .right-panel {
+  padding: 20px;
+}
+
+.remote-sensing-analysis .stat-card,
+.remote-sensing-analysis .chart-container,
+.ecological-analysis .value-item,
+.ecological-analysis .chart-container,
+.climate-monitoring .stat-item,
+.climate-monitoring .chart-container,
+.data-upload-panel .data-requirements {
+  background: #fff;
+  border: 1px solid var(--biz-border);
+  border-radius: 8px;
+  box-shadow: none;
+}
+
+.feedback-page-apple {
+  background: var(--biz-page);
+  padding: 32px 24px;
+}
+
+.feedback-card-apple {
+  max-width: 760px;
+  border-radius: 8px;
+  border: 1px solid var(--biz-border);
+  box-shadow: 0 10px 28px rgba(30, 50, 70, 0.10);
+}
+
+.title-apple {
+  color: var(--biz-text);
+}
+
+/* 强制统一业务功能页的基础骨架，覆盖各页面 scoped 样式中的旧渐变和大图标。 */
+.remote-sensing-analysis,
+.ecological-analysis,
+.overlay-analysis,
+.climate-monitoring {
+  width: 100vw !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+  background: var(--biz-page) !important;
+}
+
+.remote-sensing-analysis,
+.ecological-analysis .ecological-container,
+.overlay-analysis .main-container,
+.climate-monitoring .main-container {
+  min-width: 0 !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  overflow: hidden !important;
+}
+
+.remote-sensing-analysis .control-panel,
+.ecological-analysis .left-panel,
+.overlay-analysis .left-panel,
+.climate-monitoring .left-panel {
+  width: 350px !important;
+  height: 100vh !important;
+  min-height: 0 !important;
+  flex-shrink: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 0 !important;
+}
+
+.remote-sensing-analysis .result-area,
+.ecological-analysis .right-panel,
+.climate-monitoring .right-panel {
+  height: 100vh !important;
+  min-height: 0 !important;
+  min-width: 0 !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  padding: 20px !important;
+}
+
+.overlay-analysis .map-area {
+  height: 100vh !important;
+  min-width: 0 !important;
+  overflow: hidden !important;
+}
+
+.remote-sensing-analysis .panel-header,
+.ecological-analysis .panel-header,
+.overlay-analysis .panel-header,
+.climate-monitoring .panel-header {
+  position: relative !important;
+  background: #1890ff !important;
+  color: #ffffff !important;
+  padding: 14px 16px !important;
+  text-align: left !important;
+  border-bottom: 1px solid #1683e8 !important;
+  box-shadow: none !important;
+}
+
+.remote-sensing-analysis .panel-header h1,
+.ecological-analysis .panel-header h1,
+.overlay-analysis .panel-header h1,
+.climate-monitoring .panel-header h1 {
+  margin: 0 !important;
+  color: #ffffff !important;
+  font-size: 16px !important;
+  line-height: 1.35 !important;
+  font-weight: 700 !important;
+  letter-spacing: 0 !important;
+}
+
+.remote-sensing-analysis .panel-header p,
+.remote-sensing-analysis .panel-subtitle,
+.ecological-analysis .panel-header p,
+.overlay-analysis .panel-header p,
+.climate-monitoring .panel-header p {
+  margin: 6px 0 0 !important;
+  padding-right: 76px !important;
+  color: rgba(255, 255, 255, 0.86) !important;
+  font-size: 12px !important;
+  line-height: 1.45 !important;
+  opacity: 1 !important;
+}
+
+.remote-sensing-analysis .panel-header h1,
+.ecological-analysis .panel-header h1,
+.overlay-analysis .panel-header h1,
+.climate-monitoring .panel-header h1 {
+  padding-right: 76px !important;
+}
+
+.back-home-link,
+.feedback-back-link {
+  height: 28px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  border-radius: 6px;
+  text-decoration: none;
+  font-size: 12px;
+  line-height: 1;
+  transition: background 0.18s ease, border-color 0.18s ease, color 0.18s ease;
+}
+
+.back-home-link {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  padding: 0 8px;
+  color: rgba(255, 255, 255, 0.92);
+  border: 1px solid rgba(255, 255, 255, 0.34);
+  background: rgba(255, 255, 255, 0.10);
+}
+
+.back-home-link:hover {
+  color: #ffffff;
+  border-color: rgba(255, 255, 255, 0.58);
+  background: rgba(255, 255, 255, 0.18);
+}
+
+.back-home-icon {
+  width: 14px;
+  height: 14px;
+  flex-shrink: 0;
+}
+
+.feedback-card-apple {
+  position: relative;
+}
+
+.feedback-back-link {
+  margin-bottom: 14px;
+  padding: 0 9px;
+  color: var(--biz-primary-strong);
+  border: 1px solid #cfddea;
+  background: #eef4f9;
+}
+
+.feedback-back-link:hover {
+  color: #214a70;
+  border-color: #aebfd1;
+  background: #e6eff7;
+}
+
+.remote-sensing-analysis .section,
+.ecological-analysis .section,
+.overlay-analysis .section,
+.climate-monitoring .section {
+  padding: 14px 16px !important;
+  border-bottom: 1px solid var(--biz-border-soft) !important;
+}
+
+.remote-sensing-analysis .section-title,
+.ecological-analysis .section-header,
+.overlay-analysis .section-header,
+.climate-monitoring .section-header {
+  min-height: 28px !important;
+  margin-bottom: 10px !important;
+  gap: 8px !important;
+  color: var(--biz-text) !important;
+  font-size: 14px !important;
+  line-height: 1.35 !important;
+}
+
+.remote-sensing-analysis .section-icon,
+.ecological-analysis .section-icon,
+.overlay-analysis .section-icon,
+.climate-monitoring .section-icon {
+  width: 16px !important;
+  height: 16px !important;
+  font-size: 16px !important;
+  color: var(--biz-primary) !important;
+  flex-shrink: 0 !important;
+}
+
+.remote-sensing-analysis .upload-icon,
+.ecological-analysis .upload-icon,
+.climate-monitoring .upload-icon,
+.data-upload-panel .upload-icon {
+  margin-bottom: 4px !important;
+}
+
+.remote-sensing-analysis .upload-icon svg,
+.ecological-analysis .upload-icon svg,
+.climate-monitoring .upload-icon svg,
+.data-upload-panel .upload-icon svg {
+  width: 32px !important;
+  height: 32px !important;
+}
+
+.remote-sensing-analysis .upload-zone,
+.ecological-analysis .upload-zone,
+.climate-monitoring .upload-zone,
+.data-upload-panel .upload-zone {
+  padding: 16px 12px !important;
+  gap: 6px !important;
+}
+
+.remote-sensing-analysis .analysis-btn,
+.remote-sensing-analysis .cache-btn,
+.ecological-analysis .start-analysis-btn,
+.climate-monitoring .analysis-btn,
+.data-upload-panel .upload-btn {
+  height: 38px !important;
+  padding: 0 12px !important;
+  font-size: 13px !important;
+  border-radius: 7px !important;
+}
+
+.remote-sensing-analysis .index-btn,
+.ecological-analysis .index-btn,
+.data-upload-panel .type-tab {
+  min-height: 36px !important;
+  height: 36px !important;
+  font-size: 13px !important;
+  border-radius: 7px !important;
+}
+
+.climate-monitoring .placeholder,
+.remote-sensing-analysis .placeholder-apple,
+.ecological-analysis .placeholder {
+  color: #8a98a8 !important;
+  font-size: 13px !important;
+}
+
+.climate-monitoring .placeholder-icon,
+.climate-monitoring .success-icon,
+.climate-monitoring .error-icon {
+  width: 18px !important;
+  height: 18px !important;
+  font-size: 18px !important;
+  margin-bottom: 8px !important;
+}
+
+.climate-monitoring .placeholder-icon {
+  width: 64px !important;
+  height: 64px !important;
+  max-width: 64px !important;
+  max-height: 64px !important;
+  color: #c3ccd6 !important;
+  stroke-width: 1.5 !important;
+}
+
+.climate-monitoring .charts-grid {
+  min-width: 0 !important;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)) !important;
+}
+
+.climate-monitoring .chart-container {
+  min-width: 0 !important;
+}
+
+@media (max-width: 900px) {
+  .remote-sensing-analysis,
+  .ecological-analysis .ecological-container,
+  .overlay-analysis .main-container,
+  .climate-monitoring .main-container {
+    flex-direction: column !important;
+  }
+
+  .remote-sensing-analysis .control-panel,
+  .ecological-analysis .left-panel,
+  .overlay-analysis .left-panel,
+  .climate-monitoring .left-panel {
+    width: 100% !important;
+    height: 42vh !important;
+    border-right: none !important;
+    border-bottom: 1px solid var(--biz-border) !important;
+  }
+
+  .remote-sensing-analysis .result-area,
+  .ecological-analysis .right-panel,
+  .overlay-analysis .map-area,
+  .climate-monitoring .right-panel {
+    height: 58vh !important;
+  }
+}

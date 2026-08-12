@@ -6,17 +6,33 @@ Django settings for tianshuipy project - 开发环境配置
 
 from pathlib import Path
 import os
+from dotenv import load_dotenv
+
+
+def env_bool(name, default=False):
+    value = os.getenv(name)
+    if value is None:
+        return default
+    return value.strip().lower() in {'1', 'true', 'yes', 'on'}
+
+
+def env_list(name, default=None):
+    value = os.getenv(name)
+    if value is None:
+        return list(default or [])
+    return [item.strip() for item in value.split(',') if item.strip()]
 
 # Build paths inside the project like this: BASE_DIR / 'subdir'.
 BASE_DIR = Path(__file__).resolve().parent.parent
+load_dotenv(BASE_DIR / '.env')
 
 # Quick-start development settings - unsuitable for production
-SECRET_KEY = "django-insecure-@jmeepv1459j^#n1nfu@87jcfkcp_ia@jip2)m=k#h7n6@89lw"
+SECRET_KEY = os.getenv('SECRET_KEY', "django-insecure-@jmeepv1459j^#n1nfu@87jcfkcp_ia@jip2)m=k#h7n6@89lw")
 
 # SECURITY WARNING: don't run with debug turned on in production!
-DEBUG = True
+DEBUG = env_bool('DEBUG', True)
 
-ALLOWED_HOSTS = ['*']
+ALLOWED_HOSTS = env_list('ALLOWED_HOSTS', ['*'])
 
 # Application definition
 INSTALLED_APPS = [
@@ -109,6 +125,13 @@ DEFAULT_AUTO_FIELD = "django.db.models.BigAutoField"
 # 自定义用户模型
 AUTH_USER_MODEL = 'users.User'
 
+# 开发环境行为开关：默认保持演示友好
+ALLOW_PUBLIC_USER_REGISTRATION = env_bool('ALLOW_PUBLIC_USER_REGISTRATION', True)
+ALLOW_ANONYMOUS_ANALYSIS_UPLOADS = env_bool('ALLOW_ANONYMOUS_ANALYSIS_UPLOADS', True)
+ALLOW_ANONYMOUS_BUSINESS_LAYER_ADMIN = env_bool('ALLOW_ANONYMOUS_BUSINESS_LAYER_ADMIN', True)
+ALLOW_ANONYMOUS_OVERLAY_ADMIN = env_bool('ALLOW_ANONYMOUS_OVERLAY_ADMIN', True)
+ALLOW_PUBLIC_FEEDBACK_MANAGEMENT = env_bool('ALLOW_PUBLIC_FEEDBACK_MANAGEMENT', True)
+
 # REST Framework 配置
 REST_FRAMEWORK = {
     'DEFAULT_AUTHENTICATION_CLASSES': [
@@ -117,6 +140,7 @@ REST_FRAMEWORK = {
     'DEFAULT_PERMISSION_CLASSES': [
         'rest_framework.permissions.AllowAny',  # 开发环境允许匿名访问
     ],
+    'DEFAULT_SCHEMA_CLASS': 'rest_framework.schemas.openapi.AutoSchema',
     'DEFAULT_PAGINATION_CLASS': 'rest_framework.pagination.PageNumberPagination',
     'PAGE_SIZE': 20,
 }
@@ -124,11 +148,54 @@ REST_FRAMEWORK = {
 # CORS 配置 - 允许前端访问
 CORS_ALLOW_ALL_ORIGINS = True
 CORS_ALLOW_CREDENTIALS = True
+CORS_ALLOWED_ORIGINS = env_list('CORS_ALLOWED_ORIGINS', [
+    'http://localhost:3000',
+    'http://127.0.0.1:3000',
+    'http://localhost:5173',
+    'http://127.0.0.1:5173',
+])
+CSRF_TRUSTED_ORIGINS = env_list('CSRF_TRUSTED_ORIGINS', CORS_ALLOWED_ORIGINS)
+
+# 允许的请求头
+CORS_ALLOW_HEADERS = [
+    'accept',
+    'accept-encoding',
+    'authorization',
+    'content-type',
+    'dnt',
+    'origin',
+    'user-agent',
+    'x-csrftoken',
+    'x-requested-with',
+    'x-request-time',  # 添加自定义请求时间头
+]
+
+# 允许的HTTP方法
+CORS_ALLOW_METHODS = [
+    'DELETE',
+    'GET',
+    'OPTIONS',
+    'PATCH',
+    'POST',
+    'PUT',
+]
 
 # 文件上传配置
-FILE_UPLOAD_MAX_MEMORY_SIZE = 524288000  # 500MB
-DATA_UPLOAD_MAX_MEMORY_SIZE = 524288000  # 500MB
-MAX_UPLOAD_SIZE = 524288000  # 500MB
+# 大遥感栅格不能放进内存处理；超过 10MB 的上传交给 Django 临时文件处理器落盘。
+FILE_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024
+DATA_UPLOAD_MAX_MEMORY_SIZE = 10 * 1024 * 1024 * 1024
+MAX_UPLOAD_SIZE = 10 * 1024 * 1024 * 1024
+FILE_UPLOAD_HANDLERS = [
+    'django.core.files.uploadhandler.MemoryFileUploadHandler',
+    'django.core.files.uploadhandler.TemporaryFileUploadHandler',
+]
+
+# Celery 配置
+# 未配置 Redis 时保持同步演示模式；本地 .env 可切换到异步 Worker。
+CELERY_TASK_ALWAYS_EAGER = os.getenv('CELERY_TASK_ALWAYS_EAGER', 'true').lower() == 'true'
+CELERY_TASK_EAGER_PROPAGATES = False
+CELERY_BROKER_URL = os.getenv('CELERY_BROKER_URL', 'memory://')
+CELERY_RESULT_BACKEND = os.getenv('CELERY_RESULT_BACKEND', 'cache+memory://')
 
 # 日志配置
 LOGGING = {
@@ -164,4 +231,32 @@ os.makedirs(BASE_DIR / 'logs', exist_ok=True)
 os.makedirs(BASE_DIR / 'media' / 'remote_sensing', exist_ok=True)
 os.makedirs(BASE_DIR / 'media' / 'thumbnails', exist_ok=True)
 os.makedirs(BASE_DIR / 'media' / 'ecological_indices', exist_ok=True)
-os.makedirs(BASE_DIR / 'media' / 'visualizations', exist_ok=True) 
+os.makedirs(BASE_DIR / 'media' / 'visualizations', exist_ok=True)
+os.makedirs(BASE_DIR / 'media' / 'overlay_analysis' / 'rasters', exist_ok=True)
+
+# GeoServer配置（开发环境）
+GEOSERVER_URL = os.getenv('GEOSERVER_URL', 'http://localhost:8080/geoserver')
+GEOSERVER_USERNAME = os.getenv('GEOSERVER_USERNAME', 'admin')
+GEOSERVER_PASSWORD = os.getenv('GEOSERVER_PASSWORD', 'geoserver')
+GEOSERVER_WORKSPACE = os.getenv('GEOSERVER_WORKSPACE', 'tianshuipy')
+
+# 地理空间服务配置
+SPATIAL_SERVICES = {
+    'WMS_ENABLED': True,
+    'WFS_ENABLED': True,
+    'WCS_ENABLED': True,
+    'DEFAULT_CRS': 'EPSG:4326',
+    'MAX_FEATURES': 10000,
+}
+
+# Celery配置
+CELERY_ACCEPT_CONTENT = ['json']
+CELERY_TASK_SERIALIZER = 'json'
+CELERY_RESULT_SERIALIZER = 'json'
+CELERY_TIMEZONE = TIME_ZONE
+CELERY_ENABLE_UTC = True
+CELERY_TASK_TRACK_STARTED = True
+CELERY_TASK_TIME_LIMIT = int(os.getenv('CELERY_TASK_TIME_LIMIT', 30 * 60))
+CELERY_TASK_SOFT_TIME_LIMIT = int(os.getenv('CELERY_TASK_SOFT_TIME_LIMIT', 25 * 60))
+CELERY_WORKER_PREFETCH_MULTIPLIER = 1
+CELERY_WORKER_MAX_TASKS_PER_CHILD = 1

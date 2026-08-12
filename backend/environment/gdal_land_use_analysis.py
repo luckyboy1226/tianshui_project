@@ -5,9 +5,15 @@
 
 import numpy as np
 from osgeo import gdal, osr
+import matplotlib
+matplotlib.use('Agg')  # 使用非交互式后端
 import matplotlib.pyplot as plt
 import matplotlib.patches as patches
 from matplotlib.colors import ListedColormap
+
+# 设置中文字体支持
+plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'sans-serif']
+plt.rcParams['axes.unicode_minus'] = False  # 解决负号显示问题
 import os
 import json
 import pandas as pd
@@ -199,13 +205,8 @@ class LandUseAnalyzer:
             if num_features == 0:
                 return {'cohesion_index': 0.0}
             
-            # 计算每个斑块的面积
-            patch_areas = []
-            for i in range(1, num_features + 1):
-                patch_area = np.sum(labeled_array == i)
-                patch_areas.append(patch_area)
-            
-            patch_areas = np.array(patch_areas)
+            # np.bincount avoids scanning the whole raster once per patch.
+            patch_areas = np.bincount(labeled_array.ravel())[1:]
             total_area = np.sum(patch_areas)
             
             # 计算内聚力指数
@@ -525,8 +526,7 @@ class LandUseAnalyzer:
             os.makedirs(os.path.dirname(output_path), exist_ok=True)
             
             # 准备数据
-            valid_data = self.landuse_data.copy()
-            valid_data[valid_data == -9999] = 0
+            masked_data = np.ma.masked_where(self.landuse_data == -9999, self.landuse_data)
             
             # 创建颜色映射
             colors_list = []
@@ -537,12 +537,14 @@ class LandUseAnalyzer:
                 labels.append(f"{class_id}: {class_info['name']}")
             
             cmap = ListedColormap(colors_list)
+            cmap = cmap.copy()
+            cmap.set_bad((1, 1, 1, 0))
             
             # 创建图形
             fig, (ax1, ax2) = plt.subplots(1, 2, figsize=(16, 8))
             
             # 主图：土地利用分布
-            im1 = ax1.imshow(valid_data, cmap=cmap, vmin=1, vmax=len(self.landuse_classes))
+            im1 = ax1.imshow(masked_data, cmap=cmap, vmin=1, vmax=len(self.landuse_classes), interpolation='nearest')
             ax1.set_title('土地利用分布图')
             ax1.axis('off')
             
